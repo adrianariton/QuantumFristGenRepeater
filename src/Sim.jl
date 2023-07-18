@@ -40,7 +40,7 @@ function layout_content(DOM, mainfigures #TODO: remove DOM param
     menufigs_andtitles = wrap([
         vstack(
             hoverable(menufigures[i], anim=[:border], class="$(config[:colorscheme][2])";
-                    observable=@lift($active_index == i)),
+                    stayactiveif=@lift($active_index == i)),
             title_zstack[i];
             class="justify-center align-center "    
             ) 

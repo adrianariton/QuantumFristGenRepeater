@@ -224,8 +224,8 @@ landing2 = App() do session::Session
         color: $(config[:colorscheme][2]);
         border: none !important;
     """
-    buttons = [button(wrap(DOM.h1("〈")); observable=activeidx, cap=3, type=:decreasecap, style=buttonstyle),
-               button(wrap(DOM.h1("〉")); observable=activeidx, cap=3, type=:increasecap, style=buttonstyle)]
+    buttons = [modifier(wrap(DOM.h1("〈")); action=:decreasecap, parameter=activeidx, cap=3, style=buttonstyle),
+                modifier(wrap(DOM.h1("〉")); action=:increasecap, parameter=activeidx, cap=3, style=buttonstyle)]
     
     # Titles of the plots
     titles= ["Entanglement Generation",

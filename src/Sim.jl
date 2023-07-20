@@ -1,10 +1,7 @@
-
-using Base.Threads
 using WGLMakie
 WGLMakie.activate!()
 using JSServe
 using Markdown
-import JSServe.TailwindDashboard as D
 
 # 1. LOAD LAYOUT HELPER FUNCTION AND UTILSm    
 using CssMakieLayout

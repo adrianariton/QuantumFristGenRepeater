@@ -5,3 +5,5 @@ version = "0.1.0"
 
 [deps]
 CssMakieLayout = "5954c95d-ff03-4a38-b8f4-a6ed1c4752b2"
+JSServe = "824d6782-a2ef-11e9-3a09-e5662e0c26f9"
+WGLMakie = "276b4fcb-3e11-5398-bf8b-a0c2d153d008"

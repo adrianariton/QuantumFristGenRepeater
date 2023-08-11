@@ -6,6 +6,7 @@ version = "0.1.0"
 [deps]
 CSSMakieLayout = "5954c95d-ff03-4a38-b8f4-a6ed1c4752b2"
 ConcurrentSim = "6ed1e86c-fcaf-46a9-97e0-2b26a2cdb499"
+Crayons = "a8cc5b0e-0ffa-5ad4-8c14-923d3ee1735f"
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 JSServe = "824d6782-a2ef-11e9-3a09-e5662e0c26f9"
 QuantumSavory = "2de2e421-972c-4cb5-a0c3-999c85908079"

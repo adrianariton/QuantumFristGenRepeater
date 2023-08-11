@@ -51,18 +51,39 @@ end
     end
 end
 
+@resumable function listenforunlock(env::Simulation, network, channel::Channel, node, waittime=0., busytime=0.)
+    while true
+        msg = @yield take!(channel, 15)
+        if msg[:target] != node
+            put!(channel, msg, 15)
+            continue
+        end
+
+        @simlog env "id:$(msg[:entid])&m:UNLK       $node] @ $(now(env))\t> Unlocked $(msg[:target]):$(msg[:index])"
+
+        unlock(network[msg[:target]][msg[:index]])
+        @yield timeout(sim, busytime)
+    end
+end
+
 @resumable function findfreequbitresp(env::Simulation, network, channel::Channel, node, waittime=0., busytime=0.)
     while true
         msg = @yield take!(channel, 1) # [1]
 
+        # if message about free qubit somehow gets back to same node, rerout it
         if msg[:node] == node
             put!(channel, msg, 1)
             continue
         end
 
         ## BEGIN REDO
+
+        # if 2 way message has been sent cancel request and unlock source node
         if msg[:node] < node
-            unlock(network[msg[:node]][msg[:i]])
+            # Send message to unlock(network[msg[:node]][msg[:i]]) 
+            value = Dict(:target=>msg[:node], :index=>msg[:i], :message=>15, :entid=>msg[:entid])
+            put!(channel, value, 15)
+
             @simlog env "\nid:$(msg[:entid]) CANCELED MESSG NODES $node:$(msg[:i]), $(msg[:node])"
             continue
         end
@@ -78,8 +99,10 @@ end
             @yield timeout(sim, waittime)
 
             # TODO: send message to sender to unlock itself []
-            unlock(network[msg[:node]][msg[:index]])
-            @simlog env "id:$(msg[:entid])&m:UNLK       $node] @ $(now(env))\t> Unlocked $(msg[:node]):$(msg[:index])"
+            # unlock(network[msg[:node]][msg[:index]])
+            value = Dict(:target=>msg[:node], :index=>msg[:index], :message=>15, :entid=>msg[:entid])
+            put!(channel, value, 15)
+            
             continue
         end
         
@@ -273,7 +296,7 @@ function simulation_setup(sizeA, sizeB, commtimes)
     sim = get_time_tracker(network)
 
     # Set up the chhannel communicating between nodes 1 and 2
-    network[(1, 2), :channel] = [Channel(sim, commtimes[i], 20) for i in 1:2]
+    network[(1, 2), :channel] = Channel(sim, commtimes[1], 20)
 
     for v in vertices(network)
         # Create an array specifying whether a qubit is entangled with another qubit
@@ -282,3 +305,5 @@ function simulation_setup(sizeA, sizeB, commtimes)
 
     sim, network
 end
+
+# tests and purif + working version + net diag

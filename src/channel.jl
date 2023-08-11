@@ -48,7 +48,6 @@ function statusinfo(entinfo::EntInfo)
     end
 end
 
-
 mutable struct Channel
     env::Simulation
     delay::Float64

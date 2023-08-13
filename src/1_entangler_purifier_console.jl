@@ -9,7 +9,6 @@ commtimes = [0.2, 0.14]
 sim, network = simulation_setup([4,5,6,4], commtimes)
 node_timedelay = [0.4, 0.3]
 noisy_pair = noisy_pair_func(0.5)
-chn = Channel(sim, commtimes[1], 20) # 20 thread channel
 
 # setting up the edge protocol
 for (;src, dst) in edges(network)
@@ -39,12 +38,4 @@ else
         notify(obs)
         ax.title = "t=$(t)"
     end
-end
-println()
-println("Reuslts: \n")
-for item in entanglement_status
-    print(RED_FG("id:$(item.first)"))
-    print(" \t: ")
-    statusinfo(item.second)
-    println()
 end

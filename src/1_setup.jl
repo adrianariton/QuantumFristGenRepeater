@@ -1,3 +1,8 @@
+using Printf
+Base.show(io::IO, f::Float16) = print(io, RED_FG(@sprintf("%.3f",f)))
+Base.show(io::IO, f::Float64) = print(io, GREEN_FG(@sprintf("%.3f",f)))
+using Crayons
+using Crayons.Box
 # For convenient graph data structures
 using Graphs
 
@@ -16,15 +21,13 @@ using QuantumSavory
 # Predefined useful circuits
 using QuantumSavory.CircuitZoo: EntanglementSwap, Purify2to1
 
-include("channel.jl")
-
 const perfect_pair = (Z1⊗Z1 + Z2⊗Z2) / sqrt(2)
 const perfect_pair_dm = SProjector(perfect_pair)
 const mixed_dm = MixedState(perfect_pair_dm)
 noisy_pair_func(F) = F*perfect_pair_dm + (1-F)*mixed_dm # TODO make a depolarization helper
 noisy_pair = noisy_pair_func(0.5)
 
-# ENTANGLEMENT messages
+# ENTANGLEMENT/PURIFICATION messages
 @enum Messages begin
     FIND_QUBIT_TO_PAIR = 1
     ASSIGN_ORIGIN = 2
@@ -36,9 +39,7 @@ noisy_pair = noisy_pair_func(0.5)
     PURIFY = 8
     REPORT_SUCCESS = 9
 end
-
 Base.show(io::IO, f::Messages) = print(io, RED_FG(@sprintf("%.3f",f)))
-
 
 function findfreequbit(network, node)
     register = network[node]
@@ -74,10 +75,12 @@ function simulation_setup(sizes, commtimes)
     sim, network
 end
 
+# the trigger which triggers the entanglement start
 @resumable function freequbit_trigger(env::Simulation, network, node, remotenode, waittime=0., busytime=0.)
     way = node < remotenode ? 1 : 2
     channel = network[(node, remotenode), :channel][way]
     remote_channel = network[(node, remotenode), :channel][3 - way]
+    # TODO: make the assignment of channeld directional so the 3 lines above are not needed
     while true
         i = findfreequbit(network, node)
         if isnothing(i)
@@ -87,9 +90,8 @@ end
 
         @yield request(network[node][i])
         println("$(now(env)) :: $node > [trig] Locked $(node):$(i)")
-
         @yield timeout(sim, busytime)
-        put!(channel, (FIND_QUBIT_TO_PAIR, i, -1)) # signal the free index found
+        put!(channel, (FIND_QUBIT_TO_PAIR, i, -1))
     end
 end
 
@@ -102,6 +104,7 @@ end
         rec = @yield take!(remote_channel)
         msg, remote_i, i = rec[1], rec[2], rec[3]
         println("$(now(env)) :: $node received message $msg from $remotenode:$remote_i")
+
         if msg == FIND_QUBIT_TO_PAIR            
             i = findfreequbit(network, node)
             if isnothing(i)
@@ -109,10 +112,8 @@ end
                 put!(channel, (UNLOCK, i, remote_i))
                 continue
             end
-            # lock slot
             @yield request(network[node][i])
             @yield timeout(sim, busytime)
-            # assign slot
             network[node,:enttrackers][i] = (remotenode,remote_i)
             put!(channel, (ASSIGN_ORIGIN, i, remote_i))
         elseif msg == INITIALIZE_STATE
@@ -121,7 +122,7 @@ end
             unlock(network[node][i])
             put!(channel, (UNLOCK, i, remote_i))
             @yield timeout(sim, busytime)
-            # send that entanglement got generated
+            # signal that entanglement got generated
             put!(channel, (GENERATED_ENTANGLEMENT, i, remote_i))
         elseif msg == UNLOCK
             unlock(network[node][i])
@@ -141,6 +142,8 @@ end
     while true
         rec = @yield take!(remote_channel)
         msg, remote_i, i = rec[1], rec[2], rec[3]
+        println("$(now(env)) :: $node received message $msg from $remotenode:$remote_i")
+
         if msg == ASSIGN_ORIGIN
             println("$(now(env)) :: $node > Pairing $node:$i, $remotenode:$remote_i")
             network[node,:enttrackers][i] = (remotenode,remote_i)

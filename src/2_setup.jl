@@ -279,19 +279,19 @@ end
                 put!(channel, msg, 7)
             end
         else
-            put!(channel, msg, 7)
+            put!(channel, msgf, 7)
         end
     end
 end
 
-function simulation_setup(sizeA, sizeB, commtimes)
+function simulation_setup(sizes, commtimes)
     registers = Register[]
-    push!(registers, Register(sizeA))
-    push!(registers, Register(sizeB))
-    sizes = [sizeA, sizeB]
+    for s in sizes
+        push!(registers, Register(s))
+    end
 
 
-    graph = grid([2])
+    graph = grid([length(sizes)])
     network = RegisterNet(graph, registers)
     sim = get_time_tracker(network)
 
@@ -306,4 +306,4 @@ function simulation_setup(sizeA, sizeB, commtimes)
     sim, network
 end
 
-# tests and purif + working version + net diag
+# tests and purif [==] + working version [v] + net diag [v]

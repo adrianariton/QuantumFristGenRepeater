@@ -1,4 +1,4 @@
-include("setup.jl")
+include("2_setup.jl")
 
 using GLMakie # For plotting
 GLMakie.activate!()
@@ -6,7 +6,7 @@ GLMakie.activate!()
 console = false
 time = 20.3
 commtimes = [0.2, 0.14]
-sim, network = simulation_setup(4, 5, commtimes)
+sim, network = simulation_setup([4, 5, 6], commtimes)
 node_timedelay = [0.4, 0.3]
 noisy_pair = noisy_pair_func(0.5)
 chn = Channel(sim, commtimes[1], 20) # 20 thread channel
@@ -17,7 +17,6 @@ for src in vertices(network)
     
     @process findfreequbitresp(sim, network, chn, src, node_timedelay[1], node_timedelay[2])
     @process assignqubitback(sim, network, chn, src, node_timedelay[1], node_timedelay[2])
-
 
     @process listenforunlock(sim, network, chn, src, node_timedelay[1], node_timedelay[2])
 
@@ -39,7 +38,7 @@ else
 
     # record the simulation progress
     step_ts = range(0, time, step=0.1)
-    record(fig, "firstgenrepeater-03.entpurif.mp4", step_ts, framerate=10, visible=true) do t
+    record(fig, "2_firstgenrepeater.entpurif.mp4", step_ts, framerate=10, visible=true) do t
         run(sim, t)
         notify(obs)
         ax.title = "t=$(t)"

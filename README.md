@@ -20,4 +20,4 @@ sequenceDiagram
     John(process_channel)->>John(process_channel): Release locks and clear registers based on success
 ```
 
-![sequence](https://github.com/adrianariton/QuantumFirstGenRepeater/blob/master/flow.png?raw=true)
+![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/flow.png?raw=true)

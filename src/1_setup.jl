@@ -176,46 +176,47 @@ end
     remote_channel = network[(node, remotenode), :channel][3 - way]
     remote_process_channel = network[(node, remotenode), :process_channel][3 - way]
 
-    indices = []
-    remoteindices = []
+    indicesg = []
+    remoteindicesg = []
     purif_circuit_size = 2
 
     while true
         rec = @yield take!(remote_process_channel)
         msg, remote_i, i = rec[1], rec[2], rec[3]
-        push!(indices, i)
-        push!(remoteindices, remote_i)
         println("$(now(env)) PROCESS_CHANNEL :: $node:$i received message $msg from $remotenode:$remote_i")
 
         if msg == GENERATED_ENTANGLEMENT
             # begin purification process
             # lock current node and request locking of the orher
+            push!(indicesg, i)
+            push!(remoteindicesg, remote_i)
             @yield request(network[node][i])
             @yield timeout(sim, busytime)
             put!(channel, (LOCK, i, remote_i))
 
-            println("$(now(env)) :: $node > \t\tLocked $node:$i, $remotenode:$remote_i; Indices Queue: $indices, $remoteindices")
+            println("$(now(env)) :: $node > \t\tLocked $node:$i, $remotenode:$remote_i; Indices Queue: $indicesg, $remoteindicesg")
 
-            if length(indices) == purif_circuit_size
-                println("PURIFICATION : Tupled pairs: $node:$indices, $remotenode:$remoteindices; Preparing for purification")
+            if length(indicesg) == purif_circuit_size
+                println("PURIFICATION : Tupled pairs: $node:$indicesg, $remotenode:$remoteindicesg; Preparing for purification")
                 # begin purification of self
-                slots = [network[node][x] for x in indices]
+                slots = [network[node][x] for x in indicesg]
                 println(slots)
                 local_measurement = purify2to1(slots...)
                 # send message to other node to purify
-                put!(process_channel, (PURIFY, local_measurement, remoteindices))
-                indices = []
-                remoteindices = []
+                put!(process_channel, (PURIFY, local_measurement, [remoteindicesg, indicesg]))
+                indicesg = []
+                remoteindicesg = []
             end
         elseif msg == PURIFY
-            indices = i
+            indices = i[1]
+            remoteindices = i[2]
             remote_measurement = remote_i
             slots = [network[node][x] for x in indices]
             println(slots)
 
             local_measurement = purify2to1(slots...)
             success = local_measurement == remote_measurement
-            put!(process_channel, (REPORT_SUCCESS, success, indices))
+            put!(process_channel, (REPORT_SUCCESS, success, [remoteindices, indices]))
             if !success
                 println("$(now(env)) :: PURIFICATION FAILED @ $node:$indices, $remotenode:$remoteindices")
                 (traceout!(indices[i]) for i in 2:purif_circuit_size)
@@ -227,7 +228,7 @@ end
 
         elseif msg == REPORT_SUCCESS
             success = remote_i
-            indices = i
+            indices = i[1]
             if !success
                 (traceout!(indices[i]) for i in 2:purif_circuit_size)
                 network[node,:enttrackers][indices[1]] = nothing

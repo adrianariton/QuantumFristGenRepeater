@@ -235,7 +235,7 @@ end
             (network[node,:enttrackers][indices[i]] = nothing for i in 2:purif_circuit_size)
             release.(network[node][indices])
 
-            # Here we have a choice. We can either leave it as such, or signal anouther entanglement generation
+            # TODO: OPTION: Here we have a choice. We can either leave it as such, or signal anouther entanglement generation to the simple channel
         end
     end
 end

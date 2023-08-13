@@ -33,6 +33,8 @@ noisy_pair = noisy_pair_func(0.5)
     UNLOCK = 5
     ASSIGN = 6
     GENERATED_ENTANGLEMENT = 7
+    PURIFY = 8
+    REPORT_SUCCESS = 9
 end
 
 Base.show(io::IO, f::Messages) = print(io, RED_FG(@sprintf("%.3f",f)))
@@ -157,10 +159,17 @@ end
     end
 end
 
+function purify2to1(rega, regb)
+    apply!((regb, rega), CNOT)
+    meas = project_traceout!(regb, σˣ)
+    meas
+end
+
 # listening on process channel
 @resumable function purifier(env::Simulation, network, node, remotenode, waittime=0., busytime=0.)
     way = node < remotenode ? 1 : 2
     channel = network[(node, remotenode), :channel][way]
+    process_channel = network[(node, remotenode), :process_channel][way]
     remote_channel = network[(node, remotenode), :channel][3 - way]
     remote_process_channel = network[(node, remotenode), :process_channel][3 - way]
 
@@ -172,7 +181,7 @@ end
         rec = @yield take!(remote_process_channel)
         msg, remote_i, i = rec[1], rec[2], rec[3]
         push!(indices, i)
-        push!(remoteindices, i)
+        push!(remoteindices, remote_i)
         println("$(now(env)) PROCESS_CHANNEL :: $node:$i received message $msg from $remotenode:$remote_i")
 
         if msg == GENERATED_ENTANGLEMENT
@@ -186,10 +195,44 @@ end
 
             if length(indices) == purif_circuit_size
                 println("PURIFICATION : Tupled pairs: $node:$indices, $remotenode:$remoteindices; Preparing for purification")
-                # begin purif
+                # begin purification of self
+                slots = [network[node][x] for x in indices]
+                println(slots)
+                local_measurement = purify2to1(slots...)
+                # send message to other node to purify
+                put!(process_channel, (PURIFY, local_measurement, remoteindices))
                 indices = []
                 remoteindices = []
             end
+        elseif msg == PURIFY
+            indices = i
+            remote_measurement = remote_i
+            slots = [network[node][x] for x in indices]
+            println(slots)
+
+            local_measurement = purify2to1(slots...)
+            success = local_measurement == remote_measurement
+            put!(process_channel, (REPORT_SUCCESS, success, indices))
+            if !success
+                println("$(now(env)) :: PURIFICATION FAILED @ $node:$indices, $remotenode:$remoteindices")
+                (traceout!(indices[i]) for i in 2:purif_circuit_size)
+                network[node,:enttrackers][indices[1]] = nothing
+            end
+            (network[node,:enttrackers][indices[i]] = nothing for i in 2:purif_circuit_size)
+            release.(network[node][indices])
+            println("$(now(env)) :: PURIFICATION SUCCEDED @ $node:$indices, $remotenode:$remoteindices\n")
+
+        elseif msg == REPORT_SUCCESS
+            success = remote_i
+            indices = i
+            if !success
+                (traceout!(indices[i]) for i in 2:purif_circuit_size)
+                network[node,:enttrackers][indices[1]] = nothing
+            end
+            (network[node,:enttrackers][indices[i]] = nothing for i in 2:purif_circuit_size)
+            release.(network[node][indices])
+
+            # Here we have a choice. We can either leave it as such, or signal anouther entanglement generation
         end
     end
 end

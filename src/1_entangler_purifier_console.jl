@@ -19,7 +19,7 @@ for (;src, dst) in edges(network)
 end
 
 for (;src, dst) in edges(network)
-    #@process purifier(sim, network, src, dst, node_timedelay[1], node_timedelay[2])
+    @process purifier(sim, network, src, dst, node_timedelay[1], node_timedelay[2])
     @process purifier(sim, network, dst, src, node_timedelay[1], node_timedelay[2])
 end
 

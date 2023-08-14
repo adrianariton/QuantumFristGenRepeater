@@ -15,6 +15,10 @@ for (;src, dst) in edges(network)
     @process freequbit_trigger(sim, network, src, dst, node_timedelay[1], node_timedelay[2])
     @process sender(sim, network, src, dst, node_timedelay[1], node_timedelay[2])
     @process receiver(sim, network, dst, src, node_timedelay[1], node_timedelay[2])
+
+    # @process freequbit_trigger(sim, network, dst, src, node_timedelay[1], node_timedelay[2])
+    # @process sender(sim, network, dst, src, node_timedelay[1], node_timedelay[2])
+    # @process receiver(sim, network, src, dst, node_timedelay[1], node_timedelay[2])
 end
 
 for (;src, dst) in edges(network)

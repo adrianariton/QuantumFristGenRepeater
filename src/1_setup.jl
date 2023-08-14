@@ -82,6 +82,8 @@ end
     remote_channel = network[(node, remotenode), :channel][3 - way]
     # TODO: make the assignment of channeld directional so the 3 lines above are not needed
     while true
+        println("[SEARCHING] $(now(env)) :: $node")
+
         i = findfreequbit(network, node)
         if isnothing(i)
             @yield timeout(sim, waittime)
@@ -89,7 +91,7 @@ end
         end
 
         @yield request(network[node][i])
-        println("$(now(env)) :: $node > [trig] Locked $(node):$(i)")
+        println("[ENTANGLER TRIGGERED] $(now(env)) :: $node > [trig] Locked $(node):$(i)")
         @yield timeout(sim, busytime)
         put!(channel, (FIND_QUBIT_TO_PAIR, i, -1))
     end

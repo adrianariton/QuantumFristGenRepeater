@@ -114,7 +114,7 @@ end
     end
 end
 
-@resumable function receiver(env::Simulation, network, node, remotenode, waittime=0., busytime=0.)
+@resumable function entangle(env::Simulation, network, node, remotenode, waittime=0., busytime=0.)
     way = node < remotenode ? 1 : 2
     channel = network[(node, remotenode), :channel][way]
     remote_channel = network[(node, remotenode), :channel][3 - way]
@@ -123,7 +123,7 @@ end
         rec = @yield take!(remote_channel)
         msg, remote_i, i = rec[1], rec[2], rec[3]
         println("$(now(env)) :: $node:$i received message $msg from $remotenode:$remote_i")
-
+        # @receiver
         if msg == FIND_QUBIT_TO_PAIR            
             i = findfreequbit(network, node)
             if isnothing(i)
@@ -151,32 +151,12 @@ end
             @yield request(network[node][i])
             println("[*] $(now(env)) :: $node > [*] Locked $node:$i \n $(network[node]) \n")
             @yield timeout(sim, busytime)
-        end
-    end
-end
-
-@resumable function sender(env::Simulation, network, node, remotenode, waittime=0., busytime=0.)
-    way = node < remotenode ? 1 : 2
-    channel = network[(node, remotenode), :channel][way]
-    remote_channel = network[(node, remotenode), :channel][3 - way]
-
-    while true
-        rec = @yield take!(remote_channel)
-        msg, remote_i, i = rec[1], rec[2], rec[3]
-        println("$(now(env)) :: $node:$i received message $msg from $remotenode:$remote_i")
-
-        if msg == ASSIGN_ORIGIN
+        
+        # @sender
+        elseif msg == ASSIGN_ORIGIN
             println("$(now(env)) :: $node > Pairing $node:$i, $remotenode:$remote_i")
             network[node,:enttrackers][i] = (remotenode,remote_i)
             put!(channel, (INITIALIZE_STATE, i, remote_i))
-        elseif msg == UNLOCK
-            unlock(network[node][i])
-            println("[*] $(now(env)) :: $node > [*] UnLocked $node:$i \n $(network[node]) \n")
-            @yield timeout(sim, waittime)
-        elseif msg == LOCK
-            @yield request(network[node][i])
-            println("[*] $(now(env)) :: $node > [*] Locked $node:$i \n $(network[node]) \n")
-            @yield timeout(sim, busytime)
         elseif msg == GENERATED_ENTANGLEMENT
             process_channel = network[(node, remotenode), :process_channel][way]
             # reroute the message to the process channel
@@ -184,6 +164,7 @@ end
         end
     end
 end
+
 
 # R (or L) side of purify2to1. TODO: implement in CircuitZoo, once current pull req regardin that is merged
 function purify2to1(rega, regb)

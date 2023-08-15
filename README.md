@@ -32,6 +32,3 @@ In my new pull request, I implemented a way to link the color of each egdge to t
 
 - `blue` is around `0.81` fidelity
 - `red` is around `0.77` fidelity
-
-
-![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/flow.png?raw=true)

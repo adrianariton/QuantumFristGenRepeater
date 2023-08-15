@@ -1,7 +1,3 @@
-2 nodes                    |  4 nodes
-:-------------------------:|:-------------------------:
-!["2nodes"](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/1_firstgenrepeater_2nodes.entpurif.mp4?raw=true)  |  !["4nodes"](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/1_firstgenrepeater_4nodes.entpurif.mp4?raw=true) 
-
 # Chart flow of the protocol
 
 ```
@@ -32,3 +28,4 @@ In my new pull request, I implemented a way to link the color of each egdge to t
 
 - `blue` is around `0.81` fidelity
 - `red` is around `0.77` fidelity
+- `purple` is aroung `0.86` fidelity

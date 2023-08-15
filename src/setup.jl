@@ -27,6 +27,12 @@ const perfect_pair_dm = SProjector(perfect_pair)
 const mixed_dm = MixedState(perfect_pair_dm)
 noisy_pair_func(F) = F*perfect_pair_dm + (1-F)*mixed_dm # TODO make a depolarization helper
 noisy_pair = noisy_pair_func(0.5)
+#=
+    USE:    | Select which circuit to use.
+            |    2: single selection
+            |    3: double selection
+=#
+USE = 3
 
 # ENTANGLEMENT/PURIFICATION messages
 @enum Messages begin
@@ -54,6 +60,31 @@ Base.show(io::IO, f::Messages) = print(io, RED_FG(@sprintf("%.3f",f)))
         | send      => process_channel (MESSAGE_ID, variable, [remote_indices, indices])
         | receive   => remote_process_channel (MESSAGE_ID, variable, [indices, remote_indices])
 =#
+
+#= 
+    R (or L) side of purify2to1[:X] and purify3to1[:Y]
+    TODO: implement in CircuitZoo, once current pull req regarding CircuitZoo is merged
+=#
+function purify2to1(rega, regb)
+    apply!((regb, rega), CNOT)
+    meas = project_traceout!(regb, σˣ)
+    meas
+end
+
+function purify3to1(rega, regb, regc)
+    apply!((rega, regb), CNOT)
+    apply!((regc, regb), CNOT)
+
+    meas1 = project_traceout!(regb, σᶻ)
+    meas2 = project_traceout!(regc, σˣ)
+    meas = [meas1, meas2]
+    meas
+end
+
+purifcircuit = Dict(
+    2=>purify2to1,
+    3=>purify3to1
+)
 
 # finding a free qubit in the local register
 function findfreequbit(network, node)
@@ -91,7 +122,7 @@ function simulation_setup(sizes, commtimes)
     sim, network
 end
 
-# the trigger which triggers the entanglement start
+# the trigger which triggers the entanglement start e.g. a free qubit is found
 @resumable function freequbit_trigger(env::Simulation, network, node, remotenode, waittime=0., busytime=0.)
     way = node < remotenode ? 1 : 2
     channel = network[(node, remotenode), :channel][way]
@@ -165,14 +196,6 @@ end
     end
 end
 
-
-# R (or L) side of purify2to1. TODO: implement in CircuitZoo, once current pull req regardin that is merged
-function purify2to1(rega, regb)
-    apply!((regb, rega), CNOT)
-    meas = project_traceout!(regb, σˣ)
-    meas
-end
-
 # listening on process channel
 @resumable function purifier(env::Simulation, network, node, remotenode, waittime=0., busytime=0., emitonpurifsuccess=false)
     way = node < remotenode ? 1 : 2
@@ -183,14 +206,14 @@ end
 
     indicesg = []           # global vars (see if there exists another way)
     remoteindicesg = []     # global vars (see if there exists another way)
-    purif_circuit_size = 2  
+    purif_circuit_size = USE
 
     while true
         rec = @yield take!(remote_process_channel)
         msg, remote_i, i = rec[1], rec[2], rec[3]
         println("$(now(env)) PROCESS_CHANNEL :: $node:$i received message $msg from $remotenode:$remote_i")
 
-        if msg == GENERATED_ENTANGLEMENT
+        if msg == GENERATED_ENTANGLEMENT # @receiver
             # begin purification process
             # lock current node and request locking of the other
             push!(indicesg, i)
@@ -208,13 +231,13 @@ end
 
                 slots = [network[node][x] for x in indicesg]
                 println(slots)
-                local_measurement = purify2to1(slots...)
+                local_measurement = purifcircuit[USE](slots...)
                 # send message to other node to apply purif side of circuit
                 put!(process_channel, (PURIFY, local_measurement, [remoteindicesg, indicesg]))
                 indicesg = []
                 remoteindicesg = []
             end
-        elseif msg == PURIFY
+        elseif msg == PURIFY # sender
             indices = i[1]
             remoteindices = i[2]
             remote_measurement = remote_i
@@ -222,7 +245,7 @@ end
             println(slots)
             @yield timeout(sim, busytime)
 
-            local_measurement = purify2to1(slots...)
+            local_measurement = purifcircuit[USE](slots...)
             success = local_measurement == remote_measurement
             put!(process_channel, (REPORT_SUCCESS, success, [remoteindices, indices]))
             if !success
@@ -236,7 +259,7 @@ end
             (network[node,:enttrackers][indices[i]] = nothing for i in 2:purif_circuit_size)
             unlock.(network[node][indices])
 
-        elseif msg == REPORT_SUCCESS
+        elseif msg == REPORT_SUCCESS # @receiver
             success = remote_i
             indices = i[1]
             remote_indices = i[2]

@@ -1,3 +1,4 @@
+# Colored writing for console log
 using Printf
 Base.show(io::IO, f::Float16) = print(io, RED_FG(@sprintf("%.3f",f)))
 Base.show(io::IO, f::Float64) = print(io, GREEN_FG(@sprintf("%.3f",f)))
@@ -40,13 +41,28 @@ noisy_pair = noisy_pair_func(0.5)
     REPORT_SUCCESS = 9
 end
 Base.show(io::IO, f::Messages) = print(io, RED_FG(@sprintf("%.3f",f)))
+#=
+    We have 2 types of channels:
+        - normal channels (which perform basic operations)
+        - process channels (which need more than just qubits to perform actions)
 
+    The structure of a message on the normal channels is as such
+        | send      => channel        (MESSAGE_ID, index, remote_index)
+        | receive   => remote_channel (MESSAGE_ID, remote_index, index)
+
+    On the process channel we have (except on the message connecting the 2 types of channels)
+        | send      => process_channel (MESSAGE_ID, variable, [remote_indices, indices])
+        | receive   => remote_process_channel (MESSAGE_ID, variable, [indices, remote_indices])
+=#
+
+# finding a free qubit in the local register
 function findfreequbit(network, node)
     register = network[node]
     regsize = nsubsystems(register)
     findfirst(i->!isassigned(register, i) && !islocked(register[i]), 1:regsize)
 end
 
+# setting up the simulation
 function simulation_setup(sizes, commtimes)
     registers = Register[]
     for s in sizes
@@ -169,6 +185,7 @@ end
     end
 end
 
+# R (or L) side of purify2to1. TODO: implement in CircuitZoo, once current pull req regardin that is merged
 function purify2to1(rega, regb)
     apply!((regb, rega), CNOT)
     meas = project_traceout!(regb, σˣ)
@@ -183,9 +200,9 @@ end
     remote_channel = network[(node, remotenode), :channel][3 - way]
     remote_process_channel = network[(node, remotenode), :process_channel][3 - way]
 
-    indicesg = []
-    remoteindicesg = []
-    purif_circuit_size = 2
+    indicesg = []           # global vars (see if there exists another way)
+    remoteindicesg = []     # global vars (see if there exists another way)
+    purif_circuit_size = 2  
 
     while true
         rec = @yield take!(remote_process_channel)
@@ -194,7 +211,7 @@ end
 
         if msg == GENERATED_ENTANGLEMENT
             # begin purification process
-            # lock current node and request locking of the orher
+            # lock current node and request locking of the other
             push!(indicesg, i)
             push!(remoteindicesg, remote_i)
             @yield request(network[node][i])
@@ -211,7 +228,7 @@ end
                 slots = [network[node][x] for x in indicesg]
                 println(slots)
                 local_measurement = purify2to1(slots...)
-                # send message to other node to purify
+                # send message to other node to apply purif side of circuit
                 put!(process_channel, (PURIFY, local_measurement, [remoteindicesg, indicesg]))
                 indicesg = []
                 remoteindicesg = []
@@ -249,8 +266,6 @@ end
             end
             (network[node,:enttrackers][indices[i]] = nothing for i in 2:purif_circuit_size)
             unlock.(network[node][indices])
-
-
             # OPTION: Here we have a choice. We can either leave it as such, or signal anouther entanglement generation to the simple channel
             if emitonpurifsuccess && success
                 put!(channel, (GENERATED_ENTANGLEMENT, indices[1], remote_indices[1])) # emit ready for purification

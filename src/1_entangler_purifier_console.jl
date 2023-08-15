@@ -2,13 +2,13 @@ include("1_setup.jl")
 
 using GLMakie # For plotting
 GLMakie.activate!()
-
+PURIFICATION = true
 console = false
 time = 20.3
 commtimes = [0.2, 0.14]
-sim, network = simulation_setup([4,5,6,4], commtimes)
+sim, network = simulation_setup([4,5], commtimes)
 node_timedelay = [0.4, 0.3]
-noisy_pair = noisy_pair_func(0.5)
+noisy_pair = noisy_pair_func(0.7)
 
 # setting up the edge protocol
 for (;src, dst) in edges(network)
@@ -20,12 +20,12 @@ for (;src, dst) in edges(network)
     # @process sender(sim, network, dst, src, node_timedelay[1], node_timedelay[2])
     # @process receiver(sim, network, src, dst, node_timedelay[1], node_timedelay[2])
 end
-
-for (;src, dst) in edges(network)
-    @process purifier(sim, network, src, dst, node_timedelay[1], node_timedelay[2])
-    @process purifier(sim, network, dst, src, node_timedelay[1], node_timedelay[2])
+if PURIFICATION
+    for (;src, dst) in edges(network)
+        @process purifier(sim, network, src, dst, node_timedelay[1], node_timedelay[2], false)
+        @process purifier(sim, network, dst, src, node_timedelay[1], node_timedelay[2], false)
+    end
 end
-
 
 if console
     run(sim, time)
@@ -37,7 +37,7 @@ else
 
     # record the simulation progress
     step_ts = range(0, time, step=0.1)
-    record(fig, "1_firstgenrepeater.entpurif.mp4", step_ts, framerate=10, visible=true) do t
+    record(fig, "1_firstgenrepeater$time.$(PURIFICATION ? "entpurif" : "ent").mp4", step_ts, framerate=10, visible=true) do t
         run(sim, t)
         notify(obs)
         ax.title = "t=$(t)"

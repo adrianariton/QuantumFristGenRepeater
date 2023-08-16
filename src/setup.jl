@@ -32,7 +32,7 @@ noisy_pair = noisy_pair_func(0.5)
             |    2: single selection
             |    3: double selection
 =#
-USE = 3
+USE = 2
 
 # ENTANGLEMENT/PURIFICATION messages
 @enum Messages begin

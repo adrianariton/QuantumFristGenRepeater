@@ -8,11 +8,11 @@ GLMakie.activate!()
 PURIFICATION = true                 # if true, purification is also performed
 console = false                     # if true, the program will not produce a vide file
 time = 20.3                         # time to run the simulation
-commtimes = [0.14, 0.14]             # communication times from sender->receiver, and receiver->sender
-registersizes = [4, 5, 6, 4]               # sizes of the registers
+commtimes = [0.1, 0.1]            # communication times from sender->receiver, and receiver->sender
+registersizes = [4, 5]               # sizes of the registers
 node_timedelay = [0.4, 0.3]         # waittime and busytime for processes
 noisy_pair = noisy_pair_func(0.7)   # noisy pair
-USE = 3                             # 3 for double selection, 2 for single selection
+USE = 2                             # 3 for double selection, 2 for single selection
 
 purifcircuit = Dict(
     2=>purify2to1,

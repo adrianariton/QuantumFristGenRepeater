@@ -107,12 +107,14 @@ function simulation_setup(sizes, commtimes, protocol::FreeQubitTriggerProtocolSi
 
     # Set up the all channels communicating between nodes
     for (;src, dst) in edges(network)
-        network[(src, dst), protocol.keywords[:simple_channel]] = [DelayQueue(sim, 0.1) for i in 1:2]
+        network[src=>dst, protocol.keywords[:simple_channel]] = DelayQueue(sim, commtimes[1])
+        network[dst=>src, protocol.keywords[:simple_channel]] = DelayQueue(sim, commtimes[2])
     end
 
     # Set up the all channels that communicate when an action was finished: e.g. entanglemnt/purifiation
     for (;src, dst) in edges(network)
-        network[(src, dst), protocol.keywords[:process_channel]] = [DelayQueue(sim, 0.1) for i in 1:2]
+        network[src=>dst, protocol.keywords[:process_channel]] = DelayQueue(sim, commtimes[1])
+        network[dst=>src, protocol.keywords[:process_channel]] = DelayQueue(sim, commtimes[2])
     end
     
     for v in vertices(network)
@@ -126,12 +128,9 @@ end
 # the trigger which triggers the entanglement start e.g. a free qubit is found
 @resumable function freequbit_trigger(env::Simulation, protocol::FreeQubitTriggerProtocolSimulation, network, node, remotenode)
     waittime = protocol.waittime
-    busytime = protocol.busytime
-    
-    way = node < remotenode ? 1 : 2
-    channel = network[(node, remotenode), protocol.keywords[:simple_channel]][way]
-    remote_channel = network[(node, remotenode), protocol.keywords[:simple_channel]][3 - way]
-    # TODO: make the assignment of channeld directional so the 3 lines above are not needed
+    busytime = protocol.busytime    
+    channel = network[node=>remotenode, protocol.keywords[:simple_channel]]
+    remote_channel = network[remotenode=>node, protocol.keywords[:simple_channel]]
     while true
         println("[SEARCHING] $(now(env)) :: $node")
 
@@ -152,11 +151,8 @@ end
 @resumable function entangle(env::Simulation, protocol::FreeQubitTriggerProtocolSimulation, network, node, remotenode, showlog = true)
     waittime = protocol.waittime
     busytime = protocol.busytime
-
-    way = node < remotenode ? 1 : 2
-    channel = network[(node, remotenode), protocol.keywords[:simple_channel]][way]
-    remote_channel = network[(node, remotenode), protocol.keywords[:simple_channel]][3 - way]
-
+    channel = network[node=>remotenode, protocol.keywords[:simple_channel]]
+    remote_channel = network[remotenode=>node, protocol.keywords[:simple_channel]]
     while true
         message = @yield take!(remote_channel)
         println("replying to $message")
@@ -193,7 +189,7 @@ end
             end
             
             mGENERATED_ENTANGLEMENT(remote_i, i) => begin
-                process_channel = network[(node, remotenode), protocol.keywords[:process_channel]][way]
+                process_channel = network[node=>remotenode, protocol.keywords[:process_channel]]
                 # reroute the message to the process channel
                 put!(process_channel, mGENERATED_ENTANGLEMENT_REROUTED(i, remote_i))
             end
@@ -218,13 +214,13 @@ end
     waittime = protocol.waittime
     busytime = protocol.busytime
     emitonpurifsuccess = protocol.emitonpurifsuccess
-    
-    way = node < remotenode ? 1 : 2
-    channel = network[(node, remotenode), protocol.keywords[:simple_channel]][way]
-    process_channel = network[(node, remotenode), protocol.keywords[:process_channel]][way]
-    remote_channel = network[(node, remotenode), protocol.keywords[:simple_channel]][3 - way]
-    remote_process_channel = network[(node, remotenode), protocol.keywords[:process_channel]][3 - way]
 
+    channel = network[node=>remotenode, protocol.keywords[:simple_channel]]
+    remote_channel = network[remotenode=>node, protocol.keywords[:simple_channel]]
+
+    process_channel = network[node=>remotenode, protocol.keywords[:process_channel]]
+    remote_process_channel = network[remotenode=>node, protocol.keywords[:process_channel]]
+    
     indicesg = []           # global vars (see if there exists another way)
     remoteindicesg = []     # global vars (see if there exists another way)
     purif_circuit_size = protocol.purifier_circuit_size

@@ -16,7 +16,6 @@ config = Dict(
     :smallresolution => (280, 160), #used for the menufigures
     :colorscheme => ["rgb(242, 242, 247)", "black", "#000529", "white"]
     #:colorscheme => ["rgb(242, 242, 247)", "black", "rgb(242, 242, 247)", "black"]
-
 )
 
 obs_PURIFICATION = Observable(true)
@@ -88,7 +87,6 @@ end
 
 
 function plot_alphafig(F, meta=""; hidedecor=false)
-
     PURIFICATION = obs_PURIFICATION[]
     time = obs_time[]
     commtimes = [obs_commtime[], obs_commtime[]]
@@ -113,13 +111,13 @@ function plot_alphafig(F, meta=""; hidedecor=false)
 
     F[3, 1:6] = buttongrid = GridLayout(tellwidth = false)
     running = Observable(false)
-    buttongrid[1,1] = b = Makie.Button(F, label = @lift($running ? "Stop" : "Run"))
+    buttongrid[1,1] = b = Makie.Button(F, label = @lift($running ? "Stop" : "Run"), fontsize=32)
 
     Colorbar(F[1:2, 3:4], limits = (0, 1), colormap = :Spectral,
     flipaxis = false)
 
     plotfig = F[2,4:6]
-    fidax = Axis(plotfig[1, 2:8])
+    fidax = Axis(plotfig[2:24, 2:24], title="Maximum Entanglement Fidelity", titlesize=32)
 
     subfig = F[1, 5:6]
     sg = SliderGrid(subfig,
@@ -244,9 +242,11 @@ end
 #   the menu (the menufigures), as well as for the menufigures themselves
 
 function plot(figure_array, metas=["", "", ""]; hidedecor=false)
-    plot_alphafig(figure_array[1], metas[1]; hidedecor=hidedecor)
-    plot_betafig( figure_array[2], metas[2]; hidedecor=hidedecor)
-    plot_gammafig(figure_array[3], metas[3]; hidedecor=hidedecor)
+    with_theme(fontsize=32) do
+        plot_alphafig(figure_array[1], metas[1]; hidedecor=hidedecor)
+        plot_betafig( figure_array[2], metas[2]; hidedecor=hidedecor)
+        plot_gammafig(figure_array[3], metas[3]; hidedecor=hidedecor)
+    end
 end
 
 ###################### 4. LANDING PAGE OF THE APP ######################

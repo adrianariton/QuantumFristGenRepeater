@@ -10,7 +10,7 @@ include("setup.jl")
 
 ## config sizes TODO: make linear w.r.t screen size
 # Change between color schemes by uncommentinh lines 17-18
-retina_scale = 2
+retina_scale = 1
 config = Dict(
     :resolution => (retina_scale*1400, retina_scale*700), #used for the main figures
     :smallresolution => (280, 160), #used for the menufigures

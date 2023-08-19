@@ -1,3 +1,4 @@
+using Base.Threads
 using WGLMakie
 WGLMakie.activate!()
 using JSServe
@@ -5,15 +6,31 @@ using Markdown
 
 # 1. LOAD LAYOUT HELPER FUNCTION AND UTILSm    
 using CSSMakieLayout
+include("setup.jl")
 
 ## config sizes TODO: make linear w.r.t screen size
 # Change between color schemes by uncommentinh lines 17-18
+retina_scale = 2
 config = Dict(
-    :resolution => (1400, 700), #used for the main figures
+    :resolution => (retina_scale*1400, retina_scale*700), #used for the main figures
     :smallresolution => (280, 160), #used for the menufigures
     :colorscheme => ["rgb(242, 242, 247)", "black", "#000529", "white"]
     #:colorscheme => ["rgb(242, 242, 247)", "black", "rgb(242, 242, 247)", "black"]
 
+)
+
+obs_PURIFICATION = Observable(true)
+obs_time = Observable(20.3)
+obs_commtime = Observable(0.1)
+obs_registersizes = Observable([4, 5])
+obs_node_timedelay = Observable([0.4, 0.3])
+obs_initial_prob = Observable(0.7)
+obs_USE = Observable(3)
+obs_emitonpurifsuccess = Observable(0)
+
+purifcircuit = Dict(
+    2=>purify2to1,
+    3=>purify3to1
 )
 
 
@@ -32,7 +49,7 @@ function layout_content(DOM, mainfigures #TODO: remove DOM param
         justify-content: space-around;
         background-color: $(config[:colorscheme][1]);
         padding-top: 20px;
-        width: $(config[:resolution][1])px;
+        width: $(config[:resolution][1]/retina_scale)px;
     """
     menufigs_andtitles = wrap([
         vstack(
@@ -49,7 +66,7 @@ function layout_content(DOM, mainfigures #TODO: remove DOM param
                 wrap(mainfigures[3]);
                 activeidx=active_index,
                 anim=[:whoop],
-                style="width: $(config[:resolution][1])px")
+                style="width: $(config[:resolution][1]/retina_scale)px")
     
     content = Dict(
         :activefig => activefig,
@@ -70,38 +87,127 @@ end
 #   , as one can see in the plot(figure_array, metas) function.
 
 
-function plot_alphafig(f, meta=""; hidedecor=false)
-    # This is where we will do the receipe for the first figure (Entanglement Gen)
-    # for now this plot is taken from the tutorial
-    ax = Axis(f[1, 1], limits = (0, 1, 0, 1))
+function plot_alphafig(F, meta=""; hidedecor=false)
 
-    rs_h = IntervalSlider(f[2, 1], range = LinRange(0, 1, 1000),
-        startvalues = (0.2, 0.8))
-    rs_v = IntervalSlider(f[1, 2], range = LinRange(0, 1, 1000),
-        startvalues = (0.4, 0.9), horizontal = false)
-   
-    labeltext1 = lift(rs_h.interval) do int
-        string(round.(int, digits = 2))
+    PURIFICATION = obs_PURIFICATION[]
+    time = obs_time[]
+    commtimes = [obs_commtime[], obs_commtime[]]
+    registersizes = obs_registersizes[]
+    node_timedelay = obs_node_timedelay[]
+    initial_prob = obs_initial_prob[]
+    USE = obs_USE[]
+    noisy_pair = noisy_pair_func(initial_prob[])
+    emitonpurifsuccess = obs_emitonpurifsuccess[]==1
+
+    protocol = FreeQubitTriggerProtocolSimulation(USE, purifcircuit[USE], # purifcircuit
+                                                node_timedelay[1], node_timedelay[2], # wait and busy times
+                                                Dict(:simple_channel=>:channel,
+                                                    :process_channel=>:process_channel), # keywords to store the 2 types of channels in the network
+                                                emitonpurifsuccess) # emit on purifsucess
+    sim, network = simulation_setup(registersizes, commtimes, protocol)
+    _,ax,p,obs = registernetplot_axis(F[1:2,1:3],network; color2qubitlinks=true)
+
+    if hidedecor
+        return
     end
-    Label(f[3, 1], labeltext1, tellwidth = false)
-    labeltext2 = lift(rs_v.interval) do int
-        string(round.(int, digits = 2))
-    end
-    Label(f[1, 3], labeltext2,
-        tellheight = false, rotation = pi/2)
 
-    points = rand(Point2f, 300)
+    F[3, 1:6] = buttongrid = GridLayout(tellwidth = false)
+    running = Observable(false)
+    buttongrid[1,1] = b = Makie.Button(F, label = @lift($running ? "Stop" : "Run"))
 
-    # color points differently if they are within the two intervals
-    colors = lift(rs_h.interval, rs_v.interval) do h_int, v_int
-        map(points) do p
-            (h_int[1] < p[1] < h_int[2]) && (v_int[1] < p[2] < v_int[2])
+    Colorbar(F[1:2, 3:4], limits = (0, 1), colormap = :Spectral,
+    flipaxis = false)
+
+    plotfig = F[2,4:6]
+    fidax = Axis(plotfig[1, 2:8])
+
+    subfig = F[1, 5:6]
+    sg = SliderGrid(subfig,
+    (label="time", range=3:0.1:30, startvalue=20.3),
+    (label="circuit", range=2:3, startvalue=3),
+    (label="1 - pauli error prob", range=0.5:0.1:0.9, startvalue=0.7),
+    (label="chanel delay", range=0.1:0.1:0.3, startvalue=0.1),
+    (label="recycle purif pairs", range=0:1, startvalue=0))
+    observable_params = [obs_time, obs_USE, obs_initial_prob, obs_commtime, obs_emitonpurifsuccess]
+
+    for i in 1:length(observable_params)
+        on(sg.sliders[i].value) do val
+            if !running[]
+                observable_params[i][] = val
+                notify(observable_params[i])
+            end
         end
     end
 
-    scatter!(ax, points, color = colors, colormap = [:black, :orange], strokewidth = 0)
-    if hidedecor
-        hidedecorations!(ax)
+    on(b.clicks) do _ 
+        running[] = !running[]
+    end
+
+    on(running) do r
+        if r
+            PURIFICATION = obs_PURIFICATION[]
+            time = obs_time[]
+            commtimes = [obs_commtime[], obs_commtime[]]
+            registersizes = obs_registersizes[]
+            node_timedelay = obs_node_timedelay[]
+            initial_prob = obs_initial_prob[]
+            USE = obs_USE[]
+            noisy_pair = noisy_pair_func(initial_prob[])
+            emitonpurifsuccess = obs_emitonpurifsuccess[]==1
+
+            protocol = FreeQubitTriggerProtocolSimulation(USE, purifcircuit[USE], # purifcircuit
+                                                        node_timedelay[1], node_timedelay[2], # wait and busy times
+                                                        Dict(:simple_channel=>:channel,
+                                                            :process_channel=>:process_channel), # keywords to store the 2 types of channels in the network
+                                                        emitonpurifsuccess) # emit on purif success
+            sim, network = simulation_setup(registersizes, commtimes, protocol)
+            _,ax,p,obs = registernetplot_axis(F[1:2,1:3],network; color2qubitlinks=true)
+
+            
+            currenttime = Observable(0.0)
+            # Setting up the ENTANGMELENT protocol
+            for (;src, dst) in edges(network)
+                @process freequbit_trigger(sim, protocol, network, src, dst)
+                @process entangle(sim, protocol, network, src, dst, noisy_pair)
+                @process entangle(sim, protocol, network, dst, src, noisy_pair)
+            end
+            # Setting up the purification protocol 
+            if PURIFICATION
+                for (;src, dst) in edges(network)
+                    @process purifier(sim, protocol, network, src, dst)
+                    @process purifier(sim, protocol, network, dst, src)
+                end
+            end
+
+            step_ts = range(0, time[], step=0.1)
+            #run(sim, time[])
+
+            coordsx = Float32[]
+            maxcoordsy= Float32[]
+            mincoordsy= Float32[]
+            for t in 0:0.1:time
+                currenttime[] = t
+                run(sim, currenttime[])
+                notify(obs)
+                ax.title = "t=$(t)"
+                if !running[]
+                    break
+                end
+                if length(p[:fids][]) > 0
+                    push!(coordsx, t)
+                    push!(maxcoordsy, maximum(p[:fids][]))
+                    empty!(fidax)
+                    stairs!(fidax, coordsx, maxcoordsy, color=(emitonpurifsuccess ? :blue : :green), linewidth=3)
+                end
+            end
+        else
+            
+            empty!(ax)
+            ax.title=nothing
+            sim, network = simulation_setup(registersizes, commtimes, protocol)
+            _,ax,p,obs = registernetplot_axis(F[1:2,1:3],network; color2qubitlinks=true)
+
+        end
     end
 end
 
@@ -237,7 +343,7 @@ landing2 = App() do session::Session
                 wrap(mainfigures[2]),
                 wrap(mainfigures[3]);
                 activeidx=activeidx,
-                style="width: $(config[:resolution][1])px")
+                style="width: $(config[:resolution][1]/retina_scale)px")
     
 
     layout = hstack(buttons[1], activefig, buttons[2])

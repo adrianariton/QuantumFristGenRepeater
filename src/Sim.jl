@@ -10,7 +10,7 @@ include("setup.jl")
 
 ## config sizes TODO: make linear w.r.t screen size
 # Change between color schemes by uncommentinh lines 17-18
-retina_scale = 1
+retina_scale = 2
 config = Dict(
     :resolution => (retina_scale*1400, retina_scale*700), #used for the main figures
     :smallresolution => (280, 160), #used for the menufigures
@@ -21,7 +21,7 @@ config = Dict(
 obs_PURIFICATION = Observable(true)
 obs_time = Observable(20.3)
 obs_commtime = Observable(0.1)
-obs_registersizes = Observable([4, 5])
+obs_registersizes = Observable([3, 5])
 obs_node_timedelay = Observable([0.4, 0.3])
 obs_initial_prob = Observable(0.7)
 obs_USE = Observable(3)

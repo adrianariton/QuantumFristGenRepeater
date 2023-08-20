@@ -279,6 +279,7 @@ end
                 unlock.(network[node][indices])
                 # OPTION: Here we have a choice. We can either leave it as such, or signal anouther entanglement generation to the simple channel
                 if emitonpurifsuccess && success
+                    @yield timeout(sim, busytime)
                     put!(channel, mGENERATED_ENTANGLEMENT(indices[1], remoteindices[1])) # emit ready for purification
                 end
             end

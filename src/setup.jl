@@ -1,7 +1,7 @@
 # Colored writing for console log
 using Printf
-# Base.show(io::IO, f::Float16) = print(io, RED_FG(@sprintf("%.3f",f)))
-# Base.show(io::IO, f::Float64) = print(io, GREEN_FG(@sprintf("%.3f",f)))
+Base.show(io::IO, f::Float16) = print(io, (@sprintf("%.3f",f)))
+Base.show(io::IO, f::Float64) = print(io, (@sprintf("%.3f",f)))
 using Crayons
 using Crayons.Box
 # For convenient graph data structures
@@ -28,13 +28,34 @@ const perfect_pair_dm = SProjector(perfect_pair)
 const mixed_dm = MixedState(perfect_pair_dm)
 noisy_pair_func(F) = F*perfect_pair_dm + (1-F)*mixed_dm # TODO make a depolarization helper
 
-struct FreeQubitTriggerProtocolSimulation # todo find name for it :)
+struct FreeQubitTriggerProtocolSimulation # todo find name for it :). Should i just use normal params in the processes and get rid of this?
     purifier_circuit_size
     purifier_circuit
     waittime
     busytime
     keywords
     emitonpurifsuccess
+    maxgeneration
+end
+
+function slog!(s, msg)
+    if s === nothing
+        println(msg)
+        return
+    end
+    signature,message = split(msg, ">"; limit=2)
+    time=  getfirstfloat(signature)
+    el = DOM.div(DOM.span(replace(signature * " | ", "\"" => ""), style="color: cyan;"), DOM.span(replace(message, "\"" => "")), DOM.br(), class="console_line", id="console_line_$(time)_$(length(s[]))_$(rand())")
+    s[] = append!(s[], [el]) 
+    notify(s)
+end
+
+function getfirstfloat(s)
+    for el in split(s, " ")
+        if tryparse(Float64, el) !== nothing
+            return parse(Float64, el)
+        end
+    end
 end
 
 #=
@@ -57,33 +78,49 @@ end
     mINITIALIZE_STATE(remote_i, i)
     mLOCK(i)
     mUNLOCK(i)
-    mGENERATED_ENTANGLEMENT(remote_i, i)
+    mGENERATED_ENTANGLEMENT(remote_i, i, generation)
 end
 
 @sum_type ProcessMessage begin
-    mGENERATED_ENTANGLEMENT_REROUTED(remote_i, i)
-    mPURIFY(remote_measurement, indices, remoteindices)
-    mREPORT_SUCCESS(success , indices, remoteindices)
+    mGENERATED_ENTANGLEMENT_REROUTED(remote_i, i, generation)
+    mPURIFY(remote_measurement, indices, remoteindices, generation)
+    mREPORT_SUCCESS(success , indices, remoteindices, generation)
 end
 
 #= 
     R (or L) side of purify2to1[:X] and purify3to1[:Y]
     TODO: implement in CircuitZoo, once current pull req regarding CircuitZoo is merged
 =#
-function purify2to1(rega, regb)
-    apply!((regb, rega), CNOT)
-    meas = project_traceout!(regb, σˣ)
-    meas
+function purify2to1(rega, regb; type::Symbol=:X)
+    if type == :X
+        apply!((regb, rega), CNOT)
+        meas = project_traceout!(regb, σˣ)
+        meas
+    else
+        apply!((rega, regb), CNOT)
+        meas = project_traceout!(regb, σᶻ)
+        meas
+    end
 end
 
-function purify3to1(rega, regb, regc)
-    apply!((rega, regb), CNOT)
-    apply!((regc, regb), CNOT)
+function purify3to1(rega, regb, regc; type::Symbol=:Y)
+    if type == :Y || type == :X
+        apply!((rega, regb), CNOT)
+        apply!((regc, regb), CNOT)
 
-    meas1 = project_traceout!(regb, σᶻ)
-    meas2 = project_traceout!(regc, σˣ)
-    meas = [meas1, meas2]
-    meas
+        meas1 = project_traceout!(regb, σᶻ)
+        meas2 = project_traceout!(regc, σˣ)
+        meas = [meas1, meas2]
+        meas
+    else
+        apply!((rega, regb), XCZ)
+        apply!((regc, regb), ZCY)
+
+        meas1 = project_traceout!(regb, σˣ)
+        meas2 = project_traceout!(regc, σʸ)
+        meas = [meas1, meas2]
+        meas
+    end
 end
 
 # finding a free qubit in the local register
@@ -125,44 +162,43 @@ function simulation_setup(sizes, commtimes, protocol::FreeQubitTriggerProtocolSi
 end
 
 # the trigger which triggers the entanglement start e.g. a free qubit is found
-@resumable function freequbit_trigger(sim::Simulation, protocol::FreeQubitTriggerProtocolSimulation, network, node, remotenode)
+@resumable function freequbit_trigger(sim::Simulation, protocol::FreeQubitTriggerProtocolSimulation, network, node, remotenode, logfile=nothing)
     waittime = protocol.waittime
     busytime = protocol.busytime    
     channel = network[node=>remotenode, protocol.keywords[:simple_channel]]
     remote_channel = network[remotenode=>node, protocol.keywords[:simple_channel]]
     while true
-        println("[SEARCHING] $(now(sim)) :: $node")
+        slog!(logfile, "$(now(sim)) :: $node > [SEARCHING] $node")
 
         i = findfreequbit(network, node)
         if isnothing(i)
             @yield timeout(sim, waittime)
-            println("[NOTHING FOUND] $(now(sim)) :: $node")
+            slog!(logfile, "$(now(sim)) :: $node > [NOTHING FOUND]")
             continue
         end
 
         @yield request(network[node][i])
-        println("[ENTANGLER TRIGGERED] $(now(sim)) :: $node > [trig] Locked $(node):$(i)")
+        slog!(logfile, "[ENTANGLER TRIGGERED] $(now(sim)) :: $node > [trig] Locked $(node):$(i)")
         @yield timeout(sim, busytime)
         put!(channel, mFIND_QUBIT_TO_PAIR(i))
     end
 end
 
 @resumable function entangle(sim::Simulation, protocol::FreeQubitTriggerProtocolSimulation, network, node, remotenode, noisy_pair = noisy_pair_func(0.7)
-    , showlog = true)
+    , logfile=nothing)
     waittime = protocol.waittime
     busytime = protocol.busytime
     channel = network[node=>remotenode, protocol.keywords[:simple_channel]]
     remote_channel = network[remotenode=>node, protocol.keywords[:simple_channel]]
     while true
         message = @yield take!(remote_channel)
-        println("replying to $message")
+        slog!(logfile, "$(now(sim)) :: $node > Replying to $message")
         
         @cases message begin
             mFIND_QUBIT_TO_PAIR(remote_i) => begin
                 i = findfreequbit(network, node)
-                println("aaaa")
                 if isnothing(i)
-                    showlog && println("$(now(sim)) :: $node > Nothing found at $node. Unlocking $remotenode:$remote_i")
+                    slog!(logfile, "$(now(sim)) :: $node > Nothing found at $node. Unlocking $remotenode:$remote_i")
                     put!(channel, mUNLOCK(remote_i))
                 else
                     @yield request(network[node][i])
@@ -173,36 +209,36 @@ end
             end
             
             mASSIGN_ORIGIN(remote_i, i) => begin
-                showlog && println("$(now(sim)) :: $node > Pairing $node:$i, $remotenode:$remote_i")
+                slog!(logfile, "$(now(sim)) :: $node > Pairing $node:$i, $remotenode:$remote_i")
                 network[node,:enttrackers][i] = (remotenode,remote_i)
                 put!(channel, mINITIALIZE_STATE(i, remote_i))
             end
             
             mINITIALIZE_STATE(remote_i, i) => begin
                 initialize!((network[node][i], network[remotenode][remote_i]),noisy_pair; time=now(sim))
-                showlog && println("$(now(sim)) :: $node > Paired \t\t\t\t$node:$i, $remotenode:$remote_i")
+                slog!(logfile, "$(now(sim)) :: $node > Paired \t\t\t\t$node:$i, $remotenode:$remote_i")
                 unlock(network[node][i])
                 put!(channel, mUNLOCK(remote_i))
                 @yield timeout(sim, busytime)
                 # signal that entanglement got generated
-                put!(channel, mGENERATED_ENTANGLEMENT(i, remote_i))
+                put!(channel, mGENERATED_ENTANGLEMENT(i, remote_i, 1))
             end
             
-            mGENERATED_ENTANGLEMENT(remote_i, i) => begin
+            mGENERATED_ENTANGLEMENT(remote_i, i, generation) => begin
                 process_channel = network[node=>remotenode, protocol.keywords[:process_channel]]
                 # reroute the message to the process channel
-                put!(process_channel, mGENERATED_ENTANGLEMENT_REROUTED(i, remote_i))
+                put!(process_channel, mGENERATED_ENTANGLEMENT_REROUTED(i, remote_i, generation))
             end
 
             mUNLOCK(i) => begin
                 unlock(network[node][i])
-                showlog && println("[*] $(now(sim)) :: $node > [*] UnLocked $node:$i \n $(network[node]) \n")
+                slog!(logfile, "[*] $(now(sim)) :: $node > [*] UnLocked $node:$i \n")
                 @yield timeout(sim, waittime)
             end
 
             mLOCK(i) => begin
                 @yield request(network[node][i])
-                showlog && println("[*] $(now(sim)) :: $node > [*] Locked $node:$i \n $(network[node]) \n")
+                slog!(logfile, "[*] $(now(sim)) :: $node > [*] Locked $node:$i \n")
                 @yield timeout(sim, busytime)
             end
         end
@@ -210,10 +246,11 @@ end
 end
 
 # listening on process channel
-@resumable function purifier(sim::Simulation, protocol::FreeQubitTriggerProtocolSimulation, network, node, remotenode, showlog = true)
+@resumable function purifier(sim::Simulation, protocol::FreeQubitTriggerProtocolSimulation, network, node, remotenode, logfile=nothing)
     waittime = protocol.waittime
     busytime = protocol.busytime
     emitonpurifsuccess = protocol.emitonpurifsuccess
+    maxgeneration = protocol.maxgeneration
 
     channel = network[node=>remotenode, protocol.keywords[:simple_channel]]
     remote_channel = network[remotenode=>node, protocol.keywords[:simple_channel]]
@@ -221,56 +258,60 @@ end
     process_channel = network[node=>remotenode, protocol.keywords[:process_channel]]
     remote_process_channel = network[remotenode=>node, protocol.keywords[:process_channel]]
     
-    indicesg = []           # global vars (see if there exists another way)
-    remoteindicesg = []     # global vars (see if there exists another way)
+    indicesg = []     
+    remoteindicesg = []
+    for _ in 1:maxgeneration
+        push!(indicesg, [])
+        push!(remoteindicesg, [])
+    end
     purif_circuit_size = protocol.purifier_circuit_size
     while true
         message = @yield take!(remote_process_channel)
         @cases message begin
-            mGENERATED_ENTANGLEMENT_REROUTED(remote_i, i) => begin
-                push!(indicesg, i)
-                push!(remoteindicesg, remote_i)
+            mGENERATED_ENTANGLEMENT_REROUTED(remote_i, i, generation) => begin
+                push!(indicesg[generation], i)
+                push!(remoteindicesg[generation], remote_i)
                 @yield request(network[node][i])
                 @yield timeout(sim, busytime)
                 put!(channel, mLOCK(remote_i))
 
-                showlog && println("$(now(sim)) :: $node > \t\tLocked $node:$i, $remotenode:$remote_i; Indices Queue: $indicesg, $remoteindicesg")
+                slog!(logfile, "$(now(sim)) :: $node > Locked $node:$i, $remotenode:$remote_i; Indices Queue: $(indicesg[generation]), $(remoteindicesg[generation]). Generation #$generation")
 
-                if length(indicesg) == purif_circuit_size
-                    showlog && println("PURIFICATION : Tupled pairs: $node:$indicesg, $remotenode:$remoteindicesg; Preparing for purification")
+                if length(indicesg[generation]) == purif_circuit_size
+                    slog!(logfile, "$(now(sim)) :: $node > PURIFICATION : Tupled pairs: $node:$(indicesg[generation]), $remotenode:$(remoteindicesg[generation]); Preparing for purification")
                     # begin purification of self
                     @yield timeout(sim, busytime)
 
-                    slots = [network[node][x] for x in indicesg]
-                    showlog && println(slots)
-                    local_measurement = protocol.purifier_circuit(slots...)
+                    slots = [network[node][x] for x in indicesg[generation]]
+                    #slog!(logfile, slots)
+                    local_measurement = protocol.purifier_circuit(slots...; type=(:X, :Z)[generation%2+1])
                     # send message to other node to apply purif side of circuit
-                    put!(process_channel, mPURIFY(local_measurement, remoteindicesg, indicesg))
-                    indicesg = []
-                    remoteindicesg = []
+                    put!(process_channel, mPURIFY(local_measurement, remoteindicesg[generation], indicesg[generation], generation))
+                    indicesg[generation] = []
+                    remoteindicesg[generation] = []
                 end
             end
 
-            mPURIFY(remote_measurement, indices, remoteindices) => begin
+            mPURIFY(remote_measurement, indices, remoteindices, generation) => begin
                 slots = [network[node][x] for x in indices]
-                showlog && println(slots)
+                #slog!(logfile, slots)
                 @yield timeout(sim, busytime)
 
-                local_measurement = protocol.purifier_circuit(slots...)
+                local_measurement = protocol.purifier_circuit(slots...; type=(:X, :Z)[generation%2+1])
                 success = local_measurement == remote_measurement
-                put!(process_channel, mREPORT_SUCCESS(success, remoteindices, indices))
+                put!(process_channel, mREPORT_SUCCESS(success, remoteindices, indices, generation))
                 if !success
-                    showlog && println("$(now(sim)) :: PURIFICATION FAILED @ $node:$indices, $remotenode:$remoteindices")
+                    slog!(logfile, "$(now(sim)) :: PURIFICATION FAILED > @ $node:$indices, $remotenode:$remoteindices")
                     traceout!(network[node][indices[1]])
                     network[node,:enttrackers][indices[1]] = nothing
                 else
-                    showlog && println("$(now(sim)) :: PURIFICATION SUCCEDED @ $node:$indices, $remotenode:$remoteindices\n")
+                    slog!(logfile, "$(now(sim)) :: PURIFICATION SUCCEDED > @ $node:$indices, $remotenode:$remoteindices\n")
                 end
                 (network[node,:enttrackers][indices[i]] = nothing for i in 2:purif_circuit_size)
                 unlock.(network[node][indices])
             end
 
-            mREPORT_SUCCESS(success, indices, remoteindices) => begin
+            mREPORT_SUCCESS(success, indices, remoteindices, generation) => begin
                 if !success
                     traceout!(network[node][indices[1]])
                     network[node,:enttrackers][indices[1]] = nothing
@@ -278,9 +319,9 @@ end
                 (network[node,:enttrackers][indices[i]] = nothing for i in 2:purif_circuit_size)
                 unlock.(network[node][indices])
                 # OPTION: Here we have a choice. We can either leave it as such, or signal anouther entanglement generation to the simple channel
-                if emitonpurifsuccess && success
+                if emitonpurifsuccess && success && generation+1 <= maxgeneration
                     @yield timeout(sim, busytime)
-                    put!(channel, mGENERATED_ENTANGLEMENT(indices[1], remoteindices[1])) # emit ready for purification
+                    put!(channel, mGENERATED_ENTANGLEMENT(indices[1], remoteindices[1], generation+1)) # emit ready for purification and increase generation
                 end
             end
         end

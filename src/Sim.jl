@@ -7,6 +7,7 @@ using Markdown
 # 1. LOAD LAYOUT HELPER FUNCTION AND UTILSm    
 using CSSMakieLayout
 include("setup.jl")
+import JSServe.TailwindDashboard as D
 
 ## config sizes TODO: make linear w.r.t screen size
 # Change between color schemes by uncommentinh lines 17-18
@@ -17,16 +18,19 @@ config = Dict(
     :colorscheme => ["rgb(242, 242, 247)", "black", "#000529", "white"]
     #:colorscheme => ["rgb(242, 242, 247)", "black", "rgb(242, 242, 247)", "black"]
 )
-
+# TODO all these need to be added as parameters to the plot function
 obs_PURIFICATION = Observable(true)
 obs_time = Observable(20.3)
 obs_commtime = Observable(0.1)
-obs_registersizes = Observable([3, 5])
+obs_registersizes = Observable([6, 6])
 obs_node_timedelay = Observable([0.4, 0.3])
 obs_initial_prob = Observable(0.7)
 obs_USE = Observable(3)
 obs_emitonpurifsuccess = Observable(0)
-
+logstring = Observable([DOM.span("Log:", id="console_line_0.0_1"), ])
+logdiv = Observable([])
+stamp = Observable(0.0)
+showlog = true
 purifcircuit = Dict(
     2=>purify2to1,
     3=>purify3to1
@@ -40,7 +44,7 @@ purifcircuit = Dict(
 #   clicked)
 
 function layout_content(DOM, mainfigures #TODO: remove DOM param
-    , menufigures, title_zstack, session, active_index)
+    , menufigures, title_zstack, session, active_index; keepsame=false)
     
     menufigs_style = """
         display:flex;
@@ -52,10 +56,10 @@ function layout_content(DOM, mainfigures #TODO: remove DOM param
     """
     menufigs_andtitles = wrap([
         vstack(
-            hoverable(menufigures[i], anim=[:border], class="$(config[:colorscheme][2])";
+            hoverable(keepsame ? mainfigures[i] : menufigures[i], anim=[:border], class="$(config[:colorscheme][2])";
                     stayactiveif=@lift($active_index == i)),
             title_zstack[i];
-            class="justify-center align-center "    
+            class="justify-center align-center "  
             ) 
         for i in 1:3]; class="menufigs", style=menufigs_style)
    
@@ -71,7 +75,10 @@ function layout_content(DOM, mainfigures #TODO: remove DOM param
         :activefig => activefig,
         :menufigs => menufigs_andtitles
     )
-    return DOM.div(menufigs_andtitles, CSSMakieLayout.formatstyle, activefig), content
+    return DOM.div(menufigs_andtitles, CSSMakieLayout.formatstyle, activefig, DOM.style(""".menufigs canvas {
+        width: $(config[:smallresolution][1]/retina_scale)px !important;
+        height: $(config[:smallresolution][2]/retina_scale)px !important;
+    }""")), content
 
 end
 
@@ -86,7 +93,7 @@ end
 #   , as one can see in the plot(figure_array, metas) function.
 
 
-function plot_alphafig(F, meta=""; hidedecor=false)
+function plot_alphafig(F, meta="",mfig=nothing; hidedecor=false)
     PURIFICATION = obs_PURIFICATION[]
     time = obs_time[]
     commtimes = [obs_commtime[], obs_commtime[]]
@@ -96,15 +103,19 @@ function plot_alphafig(F, meta=""; hidedecor=false)
     USE = obs_USE[]
     noisy_pair = noisy_pair_func(initial_prob[])
     emitonpurifsuccess = obs_emitonpurifsuccess[]==1
+    old_params = []
 
     protocol = FreeQubitTriggerProtocolSimulation(USE, purifcircuit[USE], # purifcircuit
                                                 node_timedelay[1], node_timedelay[2], # wait and busy times
                                                 Dict(:simple_channel=>:channel,
                                                     :process_channel=>:process_channel), # keywords to store the 2 types of channels in the network
-                                                emitonpurifsuccess) # emit on purifsucess
+                                                emitonpurifsuccess, 10) # emit on purifsucess
     sim, network = simulation_setup(registersizes, commtimes, protocol)
-    _,ax,p,obs = registernetplot_axis(F[1:2,1:3],network; color2qubitlinks=true)
-
+    _,ax,p,obs = registernetplot_axis(F[1:2,1:3],network; twoqubitobservable=projector(StabilizerState("XX ZZ")))
+    _,mfig_ax,mfig_p,mfig_obs = nothing, nothing, nothing, nothing
+    (mfig !== nothing) && begin
+        _,mfig_ax,mfig_p,mfig_obs = registernetplot_axis(mfig[1, 1],network; twoqubitobservable=projector(StabilizerState("XX ZZ")))
+    end
     if hidedecor
         return
     end
@@ -118,6 +129,10 @@ function plot_alphafig(F, meta=""; hidedecor=false)
 
     plotfig = F[2,4:6]
     fidax = Axis(plotfig[2:24, 2:24], title="Maximum Entanglement Fidelity", titlesize=32)
+
+    sfigtext = F[1,4]
+    textax = Axis(sfigtext[1, 2:8])
+    hidespines!(textax, :t, :r)
 
     subfig = F[1, 5:6]
     sg = SliderGrid(subfig,
@@ -141,8 +156,21 @@ function plot_alphafig(F, meta=""; hidedecor=false)
         running[] = !running[]
     end
 
+    on(stamp) do stampval # adding stamps so one can see what the sim looked like at one point (still working on this feature)
+        if !running[]
+            sim, network, ax, mfig_ax, obs, mfig_obs = old_params[1], old_params[2], old_params[3], old_params[4], old_params[5], old_params[6]
+            println("STAMPED $stampval")
+            empty!(ax)
+            run(sim, stampval)
+            notify(obs)
+            notify(mfig_obs)
+        end
+    end
+
     on(running) do r
         if r
+            logstring[] = [DOM.span("Log:", id="console_line_0.0_1"), ]
+            logdiv[] = []
             PURIFICATION = obs_PURIFICATION[]
             time = obs_time[]
             commtimes = [obs_commtime[], obs_commtime[]]
@@ -157,28 +185,28 @@ function plot_alphafig(F, meta=""; hidedecor=false)
                                                         node_timedelay[1], node_timedelay[2], # wait and busy times
                                                         Dict(:simple_channel=>:channel,
                                                             :process_channel=>:process_channel), # keywords to store the 2 types of channels in the network
-                                                        emitonpurifsuccess) # emit on purif success
+                                                        emitonpurifsuccess, 10) # emit on purif success
             sim, network = simulation_setup(registersizes, commtimes, protocol)
-            _,ax,p,obs = registernetplot_axis(F[1:2,1:3],network; color2qubitlinks=true)
-
+            _,ax,p,obs = registernetplot_axis(F[1:2,1:3],network; twoqubitobservable=projector(StabilizerState("XX ZZ")))
+            if mfig !== nothing
+                empty!(mfig_ax)
+                _,mfig_ax,mfig_p,mfig_obs = registernetplot_axis(mfig[1, 1],network; twoqubitobservable=projector(StabilizerState("XX ZZ")))
+            end
             
             currenttime = Observable(0.0)
             # Setting up the ENTANGMELENT protocol
             for (;src, dst) in edges(network)
-                @process freequbit_trigger(sim, protocol, network, src, dst)
-                @process entangle(sim, protocol, network, src, dst, noisy_pair)
-                @process entangle(sim, protocol, network, dst, src, noisy_pair)
+                @process freequbit_trigger(sim, protocol, network, src, dst, showlog ? logstring : nothing)
+                @process entangle(sim, protocol, network, src, dst, noisy_pair, showlog ? logstring : nothing)
+                @process entangle(sim, protocol, network, dst, src, noisy_pair, showlog ? logstring : nothing)
             end
             # Setting up the purification protocol 
             if PURIFICATION
                 for (;src, dst) in edges(network)
-                    @process purifier(sim, protocol, network, src, dst)
-                    @process purifier(sim, protocol, network, dst, src)
+                    @process purifier(sim, protocol, network, src, dst, showlog ? logstring : nothing)
+                    @process purifier(sim, protocol, network, dst, src, showlog ? logstring : nothing)
                 end
             end
-
-            step_ts = range(0, time[], step=0.1)
-            #run(sim, time[])
 
             coordsx = Float32[]
             maxcoordsy= Float32[]
@@ -187,11 +215,14 @@ function plot_alphafig(F, meta=""; hidedecor=false)
                 currenttime[] = t
                 run(sim, currenttime[])
                 notify(obs)
+                notify(mfig_obs)
                 ax.title = "t=$(t)"
                 if !running[]
                     break
                 end
                 if length(p[:fids][]) > 0
+                    empty!(textax)
+                    hist!(textax, p[:fids][], direction=:x, color=:blue)
                     push!(coordsx, t)
                     push!(maxcoordsy, maximum(p[:fids][]))
                     empty!(fidax)
@@ -199,12 +230,20 @@ function plot_alphafig(F, meta=""; hidedecor=false)
                 end
             end
         else
-            
+            old_params = (sim, network, ax, mfig_ax, obs, mfig_obs)
             empty!(ax)
             ax.title=nothing
-            sim, network = simulation_setup(registersizes, commtimes, protocol)
-            _,ax,p,obs = registernetplot_axis(F[1:2,1:3],network; color2qubitlinks=true)
-
+            if mfig !== nothing
+                empty!(mfig_ax)
+                mfig_ax.title=nothing
+            end
+            
+            #sim, network = simulation_setup(registersizes, commtimes, protocol)
+            #_,ax,p,obs = registernetplot_axis(F[1:2,1:3],network; twoqubitobservable=projector(StabilizerState("XX ZZ")))
+            if mfig !== nothing
+                empty!(mfig_ax)
+                _,mfig_ax,mfig_p,mfig_obs = registernetplot_axis(mfig[1, 1],network; twoqubitobservable=projector(StabilizerState("XX ZZ")))
+            end
         end
     end
 end
@@ -241,28 +280,32 @@ end
 #   the mainfigures which get toggled by the identical figures in
 #   the menu (the menufigures), as well as for the menufigures themselves
 
-function plot(figure_array, metas=["", "", ""]; hidedecor=false)
-    with_theme(fontsize=32) do
-        plot_alphafig(figure_array[1], metas[1]; hidedecor=hidedecor)
-        plot_betafig( figure_array[2], metas[2]; hidedecor=hidedecor)
-        plot_gammafig(figure_array[3], metas[3]; hidedecor=hidedecor)
+function plot(figure_array, menufigs=[], metas=["", "", ""]; hidedecor=false)
+    if length(menufigs)==0
+        with_theme(fontsize=32) do
+            plot_alphafig(figure_array[1], metas[1]; hidedecor=hidedecor)
+            plot_betafig( figure_array[2], metas[2]; hidedecor=hidedecor)
+            plot_gammafig(figure_array[3], metas[3]; hidedecor=hidedecor)
+        end
+    else
+        with_theme(fontsize=32) do
+            plot_alphafig(figure_array[1], metas[1], menufigs[1]; hidedecor=hidedecor)
+            plot_betafig( figure_array[2], metas[2]; hidedecor=hidedecor)
+            plot_gammafig(figure_array[3], metas[3]; hidedecor=hidedecor)
+        end
     end
 end
 
 ###################### 4. LANDING PAGE OF THE APP ######################
 
 landing = App() do session::Session
-
+    keepsame=true
     # Create the menufigures and the mainfigures
     mainfigures = [Figure(backgroundcolor=:white,  resolution=config[:resolution]) for _ in 1:3]
-    menufigures = [Figure(backgroundcolor=:white,  resolution=config[:smallresolution]) for _ in 1:3]
+    menufigures = [Figure(backgroundcolor=:white,  resolution=config[:smallresolution]) for i in 1:3]
     titles= ["Entanglement Generation",
     "Entanglement Swapping",
     "Entanglement Purification"]
-    # Active index: 1 2 or 3
-    #   1: the first a.k.a alpha (Entanglement Generation) figure is active
-    #   2: the second a.k.a beta (Entanglement Swapping) figure is active    
-    #   3: the third a.k.a gamma (Entanglement Purification) figure is active
     activeidx = Observable(1)
     hoveredidx = Observable(0)
 
@@ -276,14 +319,10 @@ landing = App() do session::Session
             hoveredidx[]=i  
             notify(hoveredidx)
         end
-        
-        # TODO: figure out when mouse leaves and set hoverableidx[] to 0
     end
 
     # Using the aforementioned plot function to plot for each figure array
-    plot(mainfigures)
-    plot(menufigures; hidedecor=true)
-
+    plot(mainfigures, menufigures)
     
     # Create ZStacks displayong titles below the menu graphs
     titles_zstack = [zstack(wrap(DOM.h4(titles[i], class="upper")),
@@ -291,10 +330,7 @@ landing = App() do session::Session
                             activeidx=@lift(($hoveredidx == i || $activeidx == i)),
                             anim=[:opacity], style="""color: $(config[:colorscheme][2]);""") for i in 1:3]
 
-
-
     # Obtain reactive layout of the figures
-    
     layout, content = layout_content(DOM, mainfigures, menufigures, titles_zstack, session, activeidx)
 
     # Add title to the right in the form of a ZStack
@@ -302,65 +338,50 @@ landing = App() do session::Session
     titles_div[1] = active(titles_div[1])
     titles_div = zstack(titles_div; activeidx=activeidx, anim=[:static]
     , style="""color: $(config[:colorscheme][4]);""") # static = no animation
+
+    if showlog
+        on(logstring) do val
+            el = val[end]
+            # el = DOM.button(
+            #     el,
+            #     onclick=js"""event=> {
+            #         $(stamp).notify(parseFloat($(el).id.split('_')[2]))
+            #         console.log("TIME STAMP AT ", $(el).id.split('_')[2])
+            #     }"""
+            # ) # working on stamping feature
+            push!(logdiv[], el)
+            notify(logdiv)
+        end
+    end
     
-    
-    return hstack(layout, hstack(titles_div; style="padding: 20px; margin-left: 10px;
-                                background-color: $(config[:colorscheme][3]);"); style="width: 100%;")
+    logwrap = wrap(logdiv, class="log_wrapper", style="
+        max-height: 85vh !important; max-width: 90% !important; color: white; 
+        display: flex;
+        flex-direction: column-reverse;
+        border-left: 2px solid rgb(38, 39, 41);
+        border-bottom: 2px solid rgb(38, 39, 41);
+
+        background-color: black;
+        overflow: auto;
+    ")
+    print(logwrap)
+    println(logstring)
+
+    style = DOM.style("""
+        .console_line:hover{
+            background-color: rgba(38, 39, 41, 0.6);
+        }
+    """)
+
+
+    return hstack(layout, vstack(titles_div, logwrap; style="padding: 20px; margin-left: 10px;
+                                background-color: $(config[:colorscheme][3]);"), style; style="width: 100%;")
 
 end
 
-landing2 = App() do session::Session
-
-    # Active index: 1 2 or 3
-    #   1: the first a.k.a alpha (Entanglement Generation) figure is active
-    #   2: the second a.k.a beta (Entanglement Swapping) figure is active    
-    #   3: the third a.k.a gamma (Entanglement Purification) figure is active
-    activeidx = Observable(1)
-    hoveredidx = Observable(0)
-
-    # Create the buttons and the mainfigures
-    mainfigures = [Figure(backgroundcolor=:white,  resolution=config[:resolution]) for _ in 1:3]
-    buttonstyle = """
-        background-color: $(config[:colorscheme][1]);
-        color: $(config[:colorscheme][2]);
-        border: none !important;
-    """
-    buttons = [modifier(wrap(DOM.h1("〈")); action=:decreasecap, parameter=activeidx, cap=3, style=buttonstyle),
-                modifier(wrap(DOM.h1("〉")); action=:increasecap, parameter=activeidx, cap=3, style=buttonstyle)]
-    
-    # Titles of the plots
-    titles= ["Entanglement Generation",
-    "Entanglement Swapping",
-    "Entanglement Purification"]
-    
-
-    # Using the aforementioned plot function to plot for each figure array
-    plot(mainfigures)
-
-    # Obtain the reactive layout
-    activefig = zstack(
-                active(mainfigures[1]),
-                wrap(mainfigures[2]),
-                wrap(mainfigures[3]);
-                activeidx=activeidx,
-                style="width: $(config[:resolution][1]/retina_scale)px")
-    
-
-    layout = hstack(buttons[1], activefig, buttons[2])
-    # Add title to the right in the form of a ZStack
-    titles_div = [DOM.h1(t) for t in titles]
-    titles_div[1] = active(titles_div[1])
-    titles_div = zstack(titles_div; activeidx=activeidx, anim=[:static],
-                    style="""color: $(config[:colorscheme][4]);""") # static = no animation
-    
-    
-    return hstack(CSSMakieLayout.formatstyle, layout, hstack(titles_div; style="padding: 20px;  margin-left: 10px;
-                                background-color:  $(config[:colorscheme][3]);"); style="width: 100%;")
-
-end
 
 nav = App() do session::Session
-    return vstack(DOM.a("LANDING", href="/1"), DOM.a("LANDING2", href="/2"))
+    return vstack(DOM.a("LANDING", href="/1"))
 end
 
 ##
@@ -373,7 +394,6 @@ server = JSServe.Server(interface, port; proxy_url);
 JSServe.HTTPServer.start(server)
 JSServe.route!(server, "/" => nav);
 JSServe.route!(server, "/1" => landing);
-JSServe.route!(server, "/2" => landing2);
 
 ##
 

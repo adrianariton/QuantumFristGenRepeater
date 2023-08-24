@@ -59,11 +59,3 @@ else
         ax.title = "t=$(t)"
     end
 end
-
-# TODO LIST
-# oriented edge metadata 
-# sumtypes                                          [Done]
-# send the notebook                                 [Done]
-# defaultkeywds + ability to change it              [Done]    
-# make color code conditional on keywd 2qubitstates [Done]
-# 2 diagams                                         [Done]

@@ -9,7 +9,6 @@ using CSSMakieLayout
 include("setup.jl")
 import JSServe.TailwindDashboard as D
 
-## config sizes TODO: make linear w.r.t screen size
 # Change between color schemes by uncommentinh lines 17-18
 retina_scale = 2
 config = Dict(
@@ -18,7 +17,7 @@ config = Dict(
     :colorscheme => ["rgb(242, 242, 247)", "black", "#000529", "white"]
     #:colorscheme => ["rgb(242, 242, 247)", "black", "rgb(242, 242, 247)", "black"]
 )
-# TODO all these need to be added as parameters to the plot function
+
 obs_PURIFICATION = Observable(true)
 obs_time = Observable(20.3)
 obs_commtime = Observable(0.1)
@@ -28,15 +27,11 @@ obs_initial_prob = Observable(0.7)
 obs_USE = Observable(3)
 obs_emitonpurifsuccess = Observable(0)
 logstring = Observable("")
-logdiv = Observable([])
-logwrap = Observable(wrap(""))
-stamp = Observable(0.0)
 showlog = Observable(false)
 purifcircuit = Dict(
     2=>purify2to1,
     3=>purify3to1
 )
-
 
 ###################### 2. LAYOUT ######################
 #   Returns the reactive (click events handled by zstack)
@@ -44,7 +39,7 @@ purifcircuit = Dict(
 #   and menufigures (the small figures at the top which get
 #   clicked)
 
-function layout_content(DOM, mainfigures #TODO: remove DOM param
+function layout_content(DOM, mainfigures
     , menufigures, title_zstack, session, active_index; keepsame=false)
     
     menufigs_style = """
@@ -157,21 +152,9 @@ function plot_alphafig(F, meta="",mfig=nothing; hidedecor=false)
         running[] = !running[]
     end
 
-    on(stamp) do stampval # adding stamps so one can see what the sim looked like at one point (still working on this feature)
-        if !running[]
-            sim, network, ax, mfig_ax, obs, mfig_obs = old_params[1], old_params[2], old_params[3], old_params[4], old_params[5], old_params[6]
-            println("STAMPED $stampval")
-            empty!(ax)
-            run(sim, stampval)
-            notify(obs)
-            notify(mfig_obs)
-        end
-    end
-
     on(running) do r
         if r
             logstring[] = ""
-            logdiv[] = []
             PURIFICATION = obs_PURIFICATION[]
             time = obs_time[]
             commtimes = [obs_commtime[], obs_commtime[]]
@@ -214,7 +197,7 @@ function plot_alphafig(F, meta="",mfig=nothing; hidedecor=false)
             mincoordsy= Float32[]
             for t in 0:0.1:time
                 currenttime[] = t
-                run(sim, currenttime[])
+                run(sim, t)
                 notify(obs)
                 notify(mfig_obs)
                 ax.title = "t=$(t)"
@@ -231,16 +214,12 @@ function plot_alphafig(F, meta="",mfig=nothing; hidedecor=false)
                 end
             end
         else
-            old_params = (sim, network, ax, mfig_ax, obs, mfig_obs)
             empty!(ax)
             ax.title=nothing
             if mfig !== nothing
                 empty!(mfig_ax)
                 mfig_ax.title=nothing
             end
-            
-            #sim, network = simulation_setup(registersizes, commtimes, protocol)
-            #_,ax,p,obs = registernetplot_axis(F[1:2,1:3],network; twoqubitobservable=projector(StabilizerState("XX ZZ")))
             if mfig !== nothing
                 empty!(mfig_ax)
                 _,mfig_ax,mfig_p,mfig_obs = registernetplot_axis(mfig[1, 1],network; twoqubitobservable=projector(StabilizerState("XX ZZ")))
@@ -251,7 +230,6 @@ end
 
 function plot_betafig(figure, meta=""; hidedecor=false)
     # This is where we will do the receipe for the second figure (Entanglement Swap)
-
     ax = Axis(figure[1, 1])
     scatter!(ax, [1,2], [2,3], color=(:black, 0.2))
     axx = Axis(figure[1, 2])
@@ -333,7 +311,23 @@ landing = App() do session::Session
 
     # Obtain reactive layout of the figures
     layout, content = layout_content(DOM, mainfigures, menufigures, titles_zstack, session, activeidx)
-    
+    # Add the logs
+    logs = [wrap(tie(logstring), class="log_wrapper"),
+            wrap("log2"; style="color: white;"), 
+            wrap("log3"; style="color: white;")]
+    # Add the back and log buttons
+    backbutton = wrap(DOM.a("←", href="/"; style="width: 40px; height: 40px;"); class="backbutton")
+    logbutton = wrap(modifier(DOM.span("📜"), parameter=showlog, class="nostyle"); class="backbutton")
+    btns = vstack(backbutton, logbutton)
+    # Info about the log: enabled/disabled
+    loginfo = DOM.h4(@lift($showlog ? "Log Enabled" : "Log Disabled"); style="color: white;")
+    # Add title to the right in the form of a ZStack
+    titles_div = [vstack(hstack(DOM.h1(titles[i]), btns), loginfo, logs[i]) for i in 1:3]
+    titles_div[1] = active(titles_div[1])
+    (titles_div[i] = wrap(titles_div[i]) for i in 2:3) 
+    titles_div = zstack(titles_div; activeidx=activeidx, anim=[:static]
+    , style="""color: $(config[:colorscheme][4]);""") # static = no animation
+
     style = DOM.style("""
         .console_line:hover{
             background-color: rgba(38, 39, 41, 0.6);
@@ -370,22 +364,6 @@ landing = App() do session::Session
             background: transparent !important;
         }
     """)
-    logs = [wrap(tie(logstring), class="log_wrapper"),
-            wrap("log2"; style="color: white;"), 
-            wrap("log3"; style="color: white;")]
-
-    backbutton = wrap(DOM.a("←", href="/"; style="width: 40px; height: 40px;"); class="backbutton")
-    logbutton = wrap(modifier(DOM.span("📜"), parameter=showlog, class="nostyle"); class="backbutton")
-
-    btns = vstack(backbutton, logbutton)
-    loginfo = DOM.h4(@lift($showlog ? "Log Enabled" : "Log Disabled"); style="color: white;")
-
-    # Add title to the right in the form of a ZStack
-    titles_div = [vstack(hstack(DOM.h1(titles[i]), btns), loginfo, logs[i]) for i in 1:3]
-    titles_div[1] = active(titles_div[1])
-    (titles_div[i] = wrap(titles_div[i]) for i in 2:3) 
-    titles_div = zstack(titles_div; activeidx=activeidx, anim=[:static]
-    , style="""color: $(config[:colorscheme][4]);""") # static = no animation
 
     return hstack(layout, vstack(titles_div; style="padding: 20px; margin-left: 10px;
                                 background-color: $(config[:colorscheme][3]);"), style; style="width: 100%;")
@@ -394,7 +372,6 @@ end
 
 
 nav = App() do session::Session
-    # vstack(DOM.a("LANDING", href="/1"))
     img1 = DOM.img(src="https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/entanglement_flow.png?raw=true"; style="height:30vw; width: fit-content;border-bottom: 2px solid black; margin: 5px;")
     img2 = DOM.img(src="https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/purification_flow.png?raw=true"; style="height:30vw; width: fit-content;border-bottom: 2px solid black margin: 5px; transform: translateX(-25px);")
 

@@ -26,9 +26,9 @@ using SumTypes
 const perfect_pair = (Z1⊗Z1 + Z2⊗Z2) / sqrt(2)
 const perfect_pair_dm = SProjector(perfect_pair)
 const mixed_dm = MixedState(perfect_pair_dm)
-noisy_pair_func(F) = F*perfect_pair_dm + (1-F)*mixed_dm # TODO make a depolarization helper
+noisy_pair_func(F) = F*perfect_pair_dm + (1-F)*mixed_dm
 
-struct FreeQubitTriggerProtocolSimulation # todo find name for it :). Should i just use normal params in the processes and get rid of this?
+struct FreeQubitTriggerProtocolSimulation
     purifier_circuit_size
     purifier_circuit
     waittime
@@ -40,7 +40,7 @@ end
 
 function slog!(s, msg)
     if s === nothing
-        #println(msg)
+        println(msg)
         return
     end
     signature,message = split(msg, ">"; limit=2)
@@ -138,7 +138,7 @@ function simulation_setup(sizes, commtimes, protocol::FreeQubitTriggerProtocolSi
         push!(registers, Register(s))
     end
 
-    graph = grid([length(sizes)]) # TODO: add as parameter so people can choose graph
+    graph = grid([length(sizes)])
     network = RegisterNet(graph, registers)
     sim = get_time_tracker(network)
 

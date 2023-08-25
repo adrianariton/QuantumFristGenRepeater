@@ -21,7 +21,7 @@ config = Dict(
 obs_PURIFICATION = Observable(true)
 obs_time = Observable(20.3)
 obs_commtime = Observable(0.1)
-obs_registersizes = Observable([6, 6])
+obs_registersizes = Observable(6)
 obs_node_timedelay = Observable([0.4, 0.3])
 obs_initial_prob = Observable(0.7)
 obs_USE = Observable(3)
@@ -93,7 +93,7 @@ function plot_alphafig(F, meta="",mfig=nothing; hidedecor=false)
     PURIFICATION = obs_PURIFICATION[]
     time = obs_time[]
     commtimes = [obs_commtime[], obs_commtime[]]
-    registersizes = obs_registersizes[]
+    registersizes = [obs_registersizes[],obs_registersizes[]]
     node_timedelay = obs_node_timedelay[]
     initial_prob = obs_initial_prob[]
     USE = obs_USE[]
@@ -131,13 +131,23 @@ function plot_alphafig(F, meta="",mfig=nothing; hidedecor=false)
     hidespines!(textax, :t, :r)
 
     subfig = F[1, 5:6]
-    sg = SliderGrid(subfig,
+    sg = SliderGrid(subfig[1, 1],
     (label="time", range=3:0.1:30, startvalue=20.3),
-    (label="circuit", range=2:3, startvalue=3),
+    #(label="circuit", range=2:3, startvalue=3),
     (label="1 - pauli error prob", range=0.5:0.1:0.9, startvalue=0.7),
     (label="chanel delay", range=0.1:0.1:0.3, startvalue=0.1),
-    (label="recycle purif pairs", range=0:1, startvalue=0))
-    observable_params = [obs_time, obs_USE, obs_initial_prob, obs_commtime, obs_emitonpurifsuccess]
+    (label="recycle purif pairs", range=0:1, startvalue=0),
+    (label="register size", range=3:10, startvalue=6))
+    observable_params = [obs_time, #=obs_USE,=# obs_initial_prob, obs_commtime, obs_emitonpurifsuccess, obs_registersizes]
+    m = Menu(subfig[2, 1], options = ["Single Selection", "Double Selection"], prompt="Purification circuit...", default="Double Selection")
+    on(m.selection) do sel
+        if sel == "Single Selection"
+            obs_USE[] = 2
+        elseif sel == "Double Selection"
+            obs_USE[] = 3
+        end
+        notify(obs_USE)
+    end
 
     for i in 1:length(observable_params)
         on(sg.sliders[i].value) do val
@@ -158,7 +168,7 @@ function plot_alphafig(F, meta="",mfig=nothing; hidedecor=false)
             PURIFICATION = obs_PURIFICATION[]
             time = obs_time[]
             commtimes = [obs_commtime[], obs_commtime[]]
-            registersizes = obs_registersizes[]
+            registersizes = [obs_registersizes[], obs_registersizes[]]
             node_timedelay = obs_node_timedelay[]
             initial_prob = obs_initial_prob[]
             USE = obs_USE[]
@@ -315,6 +325,10 @@ landing = App() do session::Session
     logs = [wrap(tie(logstring), class="log_wrapper"),
             wrap("log2"; style="color: white;"), 
             wrap("log3"; style="color: white;")]
+    about_sections = [hstack(
+                        DOM.span(@lift($obs_USE==2 ? "Single Selection" : "Double Selection")),
+                        " | Register size: ",DOM.span(obs_registersizes)
+                        ;style="color: $(config[:colorscheme][3]) !important; padding: 5px; background-color: white;"), wrap(""), wrap("")]
     # Add the back and log buttons
     backbutton = wrap(DOM.a("←", href="/"; style="width: 40px; height: 40px;"); class="backbutton")
     logbutton = wrap(modifier(DOM.span("📜"), parameter=showlog, class="nostyle"); class="backbutton")
@@ -322,7 +336,8 @@ landing = App() do session::Session
     # Info about the log: enabled/disabled
     loginfo = DOM.h4(@lift($showlog ? "Log Enabled" : "Log Disabled"); style="color: white;")
     # Add title to the right in the form of a ZStack
-    titles_div = [vstack(hstack(DOM.h1(titles[i]), btns), loginfo, logs[i]) for i in 1:3]
+    titles_div = [vstack(hstack(DOM.h1(titles[i]), btns), about_sections[i], loginfo,
+                            logs[i]) for i in 1:3]
     titles_div[1] = active(titles_div[1])
     (titles_div[i] = wrap(titles_div[i]) for i in 2:3) 
     titles_div = zstack(titles_div; activeidx=activeidx, anim=[:static]
@@ -387,15 +402,15 @@ nav = App() do session::Session
         DOM.li(md"""The maximum fidelity among all existing pairs *(right)*"""),
     )
     text = md"""
-    # Entanglement generation in a network, using Delayed Channels for communication
+    # Entanglement generation in a network using Delayed Channels for communication
     
     Using this $(DOM.a("simulation", href="/1")), one can vizualize the processes happening in a network of nodes, as
-    they communicate with eacother, requesting entanglement, or purification of already entangled pairs.
-    The simulation has 3 parts, from which only the first one is available.
+    they communicate with eachother, requesting entanglement or purification of already entangled pairs.
+    The simulation consists of 3 parts, from which only the first one is available.
 
     ## Part 1: Entanglement and Purification between Alice and Bob
 
-    The main goal of this simulation is to help in the understanding and visualization of the protocol,
+    The main goal of this simulation is to help in the understanding and visualization of the Free Qubit Trigger Protocol,
     with different parameters.
 
     ### About the Free Qubit Trigger Protocol

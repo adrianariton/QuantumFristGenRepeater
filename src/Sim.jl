@@ -10,7 +10,7 @@ include("setup.jl")
 import JSServe.TailwindDashboard as D
 
 # Change between color schemes by uncommentinh lines 17-18
-retina_scale = 2
+retina_scale = 1
 config = Dict(
     :resolution => (retina_scale*1400, retina_scale*700), #used for the main figures
     :smallresolution => (280, 160), #used for the menufigures
@@ -93,7 +93,7 @@ function plot_alphafig(F, meta="",mfig=nothing; hidedecor=false, observables=not
     registersizes = [obs_registersizes[],obs_registersizes[]]
     node_timedelay = obs_node_timedelay[]
     initial_prob = obs_initial_prob[]
-    USE = obs_USE[]
+    USE = obs_USE[]         # id of circuit in use: 2 for singlesel, 3 for double sel
     noisy_pair = noisy_pair_func(initial_prob[])
     emitonpurifsuccess = obs_emitonpurifsuccess[]==1
 
@@ -116,26 +116,25 @@ function plot_alphafig(F, meta="",mfig=nothing; hidedecor=false, observables=not
     running = Observable(false)
     buttongrid[1,1] = b = Makie.Button(F, label = @lift($running ? "Stop" : "Run"), fontsize=32)
 
-    Colorbar(F[1:2, 3:4], limits = (0, 1), colormap = :Spectral,
-    flipaxis = false)
-
-    plotfig = F[2,4:6]
-    #fidax = Axis(plotfig[2:24, 2:24], title="Maximum Entanglement Fidelity", titlesize=32)
-    fidax = Axis(plotfig[1, 1], title="Maximum Entanglement Fidelity")
-
-    sfigtext = F[1,4]
-    textax = Axis(sfigtext[1, 2:8])
+    leftfig = F[1:2, 1:3]
+    rightfig = F[1:2, 4:6]
+    
+    Colorbar(leftfig[1:2, 3], limits = (0, 1), colormap = :Spectral,
+                flipaxis = false)
+    plotfig = rightfig[2,1:4]
+    fidax = Axis(plotfig, title="Maximum Entanglement Fidelity")
+    sfigtext = rightfig[1,1]
+    textax = Axis(sfigtext)
     hidespines!(textax, :t, :r)
 
-    subfig = F[1, 5:6]
+    subfig = rightfig[1, 2:4]
     sg = SliderGrid(subfig[1, 1],
     (label="time", range=3:0.1:30, startvalue=20.3),
-    #(label="circuit", range=2:3, startvalue=3),
     (label="1 - pauli error prob", range=0.5:0.1:0.9, startvalue=0.7),
     (label="chanel delay", range=0.1:0.1:0.3, startvalue=0.1),
     (label="recycle purif pairs", range=0:1, startvalue=0),
     (label="register size", range=3:10, startvalue=6))
-    observable_params = [obs_time, #=obs_USE,=# obs_initial_prob, obs_commtime, obs_emitonpurifsuccess, obs_registersizes]
+    observable_params = [obs_time, obs_initial_prob, obs_commtime, obs_emitonpurifsuccess, obs_registersizes]
     m = Menu(subfig[2, 1], options = ["Single Selection", "Double Selection"], prompt="Purification circuit...", default="Double Selection")
     on(m.selection) do sel
         if sel == "Single Selection"
@@ -269,17 +268,13 @@ end
 
 function plot(figure_array, menufigs=[], metas=["", "", ""]; hidedecor=false, observables=[])
     if length(menufigs)==0
-        #with_theme(fontsize=32) do
-            plot_alphafig(figure_array[1], metas[1]; hidedecor=hidedecor, observables=observables[1])
-            plot_betafig( figure_array[2], metas[2]; hidedecor=hidedecor)
-            plot_gammafig(figure_array[3], metas[3]; hidedecor=hidedecor)
-        #end
+        plot_alphafig(figure_array[1], metas[1]; hidedecor=hidedecor, observables=observables[1])
+        plot_betafig( figure_array[2], metas[2]; hidedecor=hidedecor)
+        plot_gammafig(figure_array[3], metas[3]; hidedecor=hidedecor)
     else
-        #with_theme(fontsize=32) do
-            plot_alphafig(figure_array[1], metas[1], menufigs[1]; hidedecor=hidedecor, observables=observables[1])
-            plot_betafig( figure_array[2], metas[2]; hidedecor=hidedecor)
-            plot_gammafig(figure_array[3], metas[3]; hidedecor=hidedecor)
-        #end
+        plot_alphafig(figure_array[1], metas[1], menufigs[1]; hidedecor=hidedecor, observables=observables[1])
+        plot_betafig( figure_array[2], metas[2]; hidedecor=hidedecor)
+        plot_gammafig(figure_array[3], metas[3]; hidedecor=hidedecor)
     end
 end
 
@@ -309,7 +304,6 @@ landing = App() do
     activeidx = Observable(1)
     hoveredidx = Observable(0)
 
-    # CLICK EVENT LISTENERS
     for i in 1:3
         on(events(menufigures[i]).mousebutton) do event
             activeidx[]=i  
@@ -357,6 +351,7 @@ landing = App() do
     style = DOM.style("""
         .console_line:hover{
             background-color: rgba(38, 39, 41, 0.6);
+            cursor: pointer;
         }
         .log_wrapper{
             max-height: 65vh !important; max-width: 90% !important; color: white; 
@@ -365,7 +360,7 @@ landing = App() do
             border-left: 2px solid rgb(38, 39, 41);
             border-bottom: 2px solid rgb(38, 39, 41);
 
-            background-color: black;
+            background-color: #003049;
             overflow: auto;
         }
         .backbutton{
@@ -398,8 +393,8 @@ end
 
 
 nav = App() do
-    img1 = DOM.img(src="https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/entanglement_flow.png?raw=true"; style="height:30vw; width: fit-content;border-bottom: 2px solid black; margin: 5px;")
-    img2 = DOM.img(src="https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/purification_flow.png?raw=true"; style="height:30vw; width: fit-content;border-bottom: 2px solid black margin: 5px; transform: translateX(-25px);")
+    img1 = DOM.img(src="https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/entanglement_flow.png?raw=true"; style="height:30vw; width: fit-contentt;border-bottom: 2px solid black; margin: 5px;")
+    img2 = DOM.img(src="https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/purification_flow.png?raw=true"; style="height:30vw; width: fit-contentt;border-bottom: 2px solid black margin: 5px; transform: translateX(-25px);")
 
     list1 = DOM.ul(
         DOM.li(md"""`circuit`: The purification circuit being used (can be 2 for **Single Selection** and 3 for **Double Selection**)"""),

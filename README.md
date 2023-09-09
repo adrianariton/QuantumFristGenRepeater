@@ -9,7 +9,7 @@ retina_scale = 1 # modify to 2 instead of 1
 
 Entanglement (simple channel)
 
-![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/entanglement_flow.png?raw=true)
+![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/assets/entanglement_flow.png?raw=true)
 ```
 sequenceDiagram
     Alice-->>Alice: FIND_FREE_QUBIT
@@ -25,7 +25,7 @@ sequenceDiagram
 ```
 Purification (on process channel)
 
-![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/purification_flow.png?raw=true)
+![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/assets/purification_flow.png?raw=true)
 ```
 sequenceDiagram
     Bob-->>+Bob: LOCK and and repeat above diagram until length(indices) == purif_circuit_size
@@ -63,7 +63,7 @@ sequenceDiagram
 
 ```
 
-![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/flow.png?raw=true)
+![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/assets/flow.png?raw=true)
 
 # Explaining the colors
 

@@ -69,7 +69,7 @@ function plot_alphafig(F, meta="",mfig=nothing, extrafig=nothing; hidedecor=fals
     if isnothing(observables)
         return
     end
-    obs_PURIFICATION, obs_time, obs_commtime, 
+    running, obs_PURIFICATION, obs_time, obs_commtime, 
         obs_registersizes, obs_node_timedelay, obs_initial_prob,
         obs_USE, obs_emitonpurifsuccess, logstring, showlog, obs_sampledenttimes = observables
 
@@ -99,7 +99,6 @@ function plot_alphafig(F, meta="",mfig=nothing, extrafig=nothing; hidedecor=fals
     hidedecor && return
 
     F[3, 1:6] = buttongrid = GridLayout(tellwidth = false)
-    running = Observable(false)
     buttongrid[1,1] = b = Makie.Button(F, label = @lift($running ? "Stop" : "Run"), fontsize=32)
     leftfig = F[1:2, 1:3]
     rightfig = F[1:2, 4:6]
@@ -148,7 +147,7 @@ function plot_alphafig(F, meta="",mfig=nothing, extrafig=nothing; hidedecor=fals
             USE = obs_USE[]
             noisy_pair = noisy_pair_func(initial_prob[])
             emitonpurifsuccess = obs_emitonpurifsuccess[]==1
-            obs_sampledenttimes = Observable([0.0])
+            obs_sampledenttimes[] = [-1.0]
             protocol = FreeQubitTriggerProtocolSimulation(
                 purifcircuit[USE];
                 waittime=node_timedelay[1], busytime=node_timedelay[2],
@@ -184,7 +183,6 @@ function plot_alphafig(F, meta="",mfig=nothing, extrafig=nothing; hidedecor=fals
 
             coordsx = Float32[]
             maxcoordsy= Float32[]
-            mincoordsy= Float32[]
             for t in 0:0.1:time
                 currenttime[] = t
                 run(sim, t)
@@ -211,9 +209,9 @@ function plot_alphafig(F, meta="",mfig=nothing, extrafig=nothing; hidedecor=fals
 end
 
 function plot_betafig(F, meta="",mfig=nothing; hidedecor=false, observables=nothing)
-    obs_PURIFICATION, obs_time, obs_commtime, 
+    running, obs_PURIFICATION, obs_time, obs_commtime, 
         obs_registersizes, obs_node_timedelay, obs_initial_prob,
-        obs_USE, obs_emitonpurifsuccess, logstring, showlog, obs_sampledenttimes, running = observables
+        obs_USE, obs_emitonpurifsuccess, logstring, showlog, obs_sampledenttimes = observables
     rightfig = F[1:2, 4:6]
     plotfig = rightfig[2,1:4]
     waittimeax = Axis(plotfig, title="Entanglement generation wait time", limits = (0, 5, 0, 2))
@@ -253,8 +251,6 @@ function plot_betafig(F, meta="",mfig=nothing; hidedecor=false, observables=noth
     end
     for axis in axes
         lines!(axis, range, 1/0.4 * exp.(-(collect(range) ./ 0.4)), color=:blue)
-    end
-    for axis in axes
         hist!(axis, obs_sampledenttimes, color=:blue)
     end
     
@@ -269,19 +265,14 @@ end
 #   the menu (the menufigures), as well as for the menufigures themselves
 
 function plot(figure_array, menufigs=[], metas=["", "", ""]; hidedecor=false, observables=nothing)
-    if length(menufigs)==0
-        plot_alphafig(figure_array[1], metas[1]; hidedecor=hidedecor, observables=observables)
-        plot_betafig( figure_array[2], metas[2]; hidedecor=hidedecor, observables=observables)
-        plot_gammafig(figure_array[3], metas[3]; hidedecor=hidedecor, observables=observables)
-    else
-        running = plot_alphafig(figure_array[2], metas[2], menufigs[2], figure_array[1]; hidedecor=hidedecor, observables=observables)
-        plot_betafig(figure_array[1], metas[1], menufigs[1]; observables=push!(observables, running))
-    end
+    plot_alphafig(figure_array[2], metas[2], menufigs[2], figure_array[1]; hidedecor=hidedecor, observables=observables)
+    plot_betafig(figure_array[1], metas[1], menufigs[1]; observables=observables)
 end
 
 ###################### LANDING PAGE OF THE APP ######################
 
 landing = App() do session::Session
+    running = Observable(false)
     obs_PURIFICATION = Observable(true)
     obs_time = Observable(20.3)
     obs_commtime = Observable(0.1)
@@ -292,8 +283,8 @@ landing = App() do session::Session
     obs_emitonpurifsuccess = Observable(0)
     logstring = Observable("")
     showlog = Observable(false)
-    obs_sampledenttimes = Observable([0.0])
-    allobs = [obs_PURIFICATION, obs_time, obs_commtime, 
+    obs_sampledenttimes = Observable([-1.0])
+    allobs = [running, obs_PURIFICATION, obs_time, obs_commtime, 
                 obs_registersizes, obs_node_timedelay, obs_initial_prob,
                 obs_USE, obs_emitonpurifsuccess, logstring, showlog, obs_sampledenttimes]
     keepsame=true
@@ -496,11 +487,11 @@ nav = App() do
 
     The chronology of operations for the entanglegen process can be viewed in the first diagram.
     There is one single plot (on the left of the figure) other than the node graph. The plot plots the random
-    amount of time it takes for an entangled pair to generate. The time is consistent with an exponential distribution.
+    amount of time it takes for an entangled pair to generate (when receiving **INITIALIZE_STATE**). The time is consistent with an exponential distribution.
     
     ## Purification
     
-    The chronology of operations for the entanglegen process can be viewed in the second diagram.
+    The chronology of operations for the purification process can be viewed in the second diagram.
     We have 2 plots other than the node graph: a big one (bottom), and a smaller one (top, near the sliders).
     Both plots show information about fidelity. The big one plots the maxmimum fidelity among all pairs vs time,
     and the smaller one plots a histogram of all the pairs' fidelities.
@@ -508,8 +499,9 @@ nav = App() do
     One can choose between two purification circuits: Double Selection (3to1) and Single Selection (2to1)
     Their performance is different, Double Selection resulting in a higher fidelity than Single Selection.
 
-    One can view their performance in the following plot: 
+    One can view their performance in the following plot, which plots **final vs initial fidelity (blue)** and **success rate vs initial fidelity (yellow)**: 
     $(img3)
+    
     (first column - variants of single selection, colums 2 to 4 - variants of double selection)
 
 

@@ -178,7 +178,6 @@ end
                 slog!(logfile, "$(now(sim)) :: $node > Success! $node:$i and $remotenode:$remote_i are now entangled.", "$node:$i $remotenode:$remote_i")
                 unlock(network[node][i])
                 put!(channel, mUNLOCK(remote_i))
-                # @yield timeout(sim, busytime)
                 # signal that entanglement got generated
                 put!(channel, mGENERATED_ENTANGLEMENT(i, remote_i, 1))
             end

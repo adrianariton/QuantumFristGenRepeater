@@ -10,8 +10,7 @@ retina_scale = 1 # modify to 2 instead of 1
 Entanglement (simple channel)
 
 ![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/assets/entanglement_flow.png?raw=true)
-```
-sequenceDiagram
+```sequenceDiagram
     Alice-->>Alice: FIND_FREE_QUBIT
     Alice->>+Bob: FIND_QUBIT_TO_PAIR
     Bob->>Bob: WAIT_UNTIL_FOUND
@@ -26,8 +25,7 @@ sequenceDiagram
 Purification (on process channel)
 
 ![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/assets/purification_flow.png?raw=true)
-```
-sequenceDiagram
+```sequenceDiagram
     Bob-->>+Bob: LOCK and and repeat above diagram until length(indices) == purif_circuit_size
     Bob->>-Bob: Perform purification measurement and send it to Alice
 
@@ -41,8 +39,7 @@ sequenceDiagram
 Coupled purification after entanglement
 ```
 
-```
-sequenceDiagram
+```sequenceDiagram
     Alice-->>Alice: FIND_FREE_QUBIT
     Alice->>+Bob: FIND_QUBIT_TO_PAIR
     Bob->>Bob: WAIT_UNTIL_FOUND

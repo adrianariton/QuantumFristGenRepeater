@@ -10,7 +10,8 @@ retina_scale = 1 # modify to 2 instead of 1
 Entanglement (simple channel)
 
 ![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/assets/entanglement_flow.png?raw=true)
-```sequenceDiagram
+```mermaid
+sequenceDiagram
     Alice-->>Alice: FIND_FREE_QUBIT
     Alice->>+Bob: FIND_QUBIT_TO_PAIR
     Bob->>Bob: WAIT_UNTIL_FOUND
@@ -25,7 +26,8 @@ Entanglement (simple channel)
 Purification (on process channel)
 
 ![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/assets/purification_flow.png?raw=true)
-```sequenceDiagram
+```mermaid
+sequenceDiagram
     Bob-->>+Bob: LOCK and and repeat above diagram until length(indices) == purif_circuit_size
     Bob->>-Bob: Perform purification measurement and send it to Alice
 
@@ -39,7 +41,8 @@ Purification (on process channel)
 Coupled purification after entanglement
 ```
 
-```sequenceDiagram
+```mermaid
+sequenceDiagram
     Alice-->>Alice: FIND_FREE_QUBIT
     Alice->>+Bob: FIND_QUBIT_TO_PAIR
     Bob->>Bob: WAIT_UNTIL_FOUND
@@ -56,8 +59,6 @@ Coupled purification after entanglement
     Alice(process_channel)->>Bob(process_channel): REPORT_SUCCESS
     Alice(process_channel)->>-Alice(process_channel): Release locks and clear registers based on success
     Bob(process_channel)->>Bob(process_channel): Release locks and clear registers based on success
-```
-
 ```
 
 ![sequence](https://github.com/adrianariton/QuantumFristGenRepeater/blob/master/assets/flow.png?raw=true)

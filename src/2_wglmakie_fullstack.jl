@@ -570,9 +570,8 @@ nav = App() do
 end
 
 
-"""
-    Serving the app.
-"""
+
+# Serving the app.
 isdefined(Main, :server) && close(server);
 port = parse(Int, get(ENV, "QS_MESSAGEPASSINGDISTILATION_PORT", "8889"))
 interface = get(ENV, "QS_MESSAGEPASSINGDISTILATION_IP", "127.0.0.1")

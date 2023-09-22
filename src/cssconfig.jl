@@ -1,4 +1,7 @@
 retina_scale = 2
+"""
+    Resolutions and color schemes used by 2_wglmakie_fullstack.jl
+"""
 config = Dict(
     :resolution => (retina_scale*1400, retina_scale*700), # used for the main figures
     :smallresolution => (280, 160),                       # used for the menufigures
@@ -6,6 +9,7 @@ config = Dict(
     # :colorscheme => ["rgb(242, 242, 247)", "black", "#000529", "white"]
     # :colorscheme => ["rgb(242, 242, 247)", "black", "rgb(242, 242, 247)", "black"]
 )
+
 menufigs_style = """
         display:flex;
         flex-direction: row;
@@ -15,8 +19,7 @@ menufigs_style = """
         width: $(config[:resolution][1]/retina_scale)px;
     """
 
-
-style = DOM.style("""
+style = """
     body {
         font-family: Arial;
     }
@@ -66,4 +69,29 @@ style = DOM.style("""
         background-color: $(config[:colorscheme][3]);
         padding: 10px;
     }
-""")
+"""
+
+"""
+    Adds `msg`'s content into the `s` observable if set, or simply prints to console if `s`
+    is set to Nothing. `id` is used for the web version of the app, to mark which slots/registers
+    are taking part in the event signalled by a log line.
+
+    This fucntion is used to add colors to the web log, and to handle log interactions.
+"""
+function slog!(s, msg, id)
+    if s === nothing
+        println(msg)
+        return
+    end
+    signature,message = split(msg, ">"; limit=2)
+    signaturespl = split(signature, "::"; limit=3)
+    signaturespl = [strip(s) for s in signaturespl]
+    isdestroyed = length(signaturespl)==3 ? signaturespl[3] : ""
+    involvedpairs = id
+    involvedpairs = "node"*replace(replace(involvedpairs, ":"=>"slot"), " "=>" node")
+    style = isdestroyed=="destroyed" ? "border-bottom: 2px solid red;" : ""
+    signaturestr = """<span style='color:#2ca02c; border-radius: 15px;'>$(signaturespl[1])s</span>
+                      &nbsp;<span style='color:#1f77b4;'>@$(signaturespl[2]) &nbsp; | </span>"""
+    s[] = s[] * """<div class='console_line new $involvedpairs' style='$style'><span>$signaturestr</span><span>$message</span></div>"""
+    notify(s)
+end

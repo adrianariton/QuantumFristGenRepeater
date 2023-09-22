@@ -486,7 +486,7 @@ landing = App() do session::Session
         class="infodiv"
     )
     return hstack(vstack(layout, infodiv), vstack(titles_div; style="padding: 20px; margin-left: 10px;
-                                background-color: $(config[:colorscheme][3]);"), style; style="width: 100%;")
+                                background-color: $(config[:colorscheme][3]);"), DOM.style(style); style="width: 100%;")
 
 end
 
